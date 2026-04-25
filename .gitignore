@@ -27,8 +27,11 @@ build/
 dist/
 *.egg-info/
 runtime-logs/
+backend/runtime/
 # Node / frontend
 node_modules/
+frontend/node_modules/
+frontend/dist/
 # Local test/runtime artifacts
 pytest-cache-files-*/
 backend/pytest-cache-files-*/
@@ -40,6 +43,11 @@ vision_response*.txt
 tactical_chat_response.txt
 stream_error.txt
 test_logs.txt
+backend/logs/
+# Local archives and caches
+.pytest_cache/
+__pycache__/
+frontend/.vite/
 # MinIO / storage data (if any)
 storage/
 # Other sensitive files

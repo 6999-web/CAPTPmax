@@ -25,7 +25,7 @@ def _as_list(value: str | None, default: list[str]) -> list[str]:
 @dataclass(frozen=True)
 class AppSettings:
     project_name: str = "CAPTP API"
-    host: str = os.getenv("CAPTP_HOST", "101.33.210.169")
+    host: str = os.getenv("CAPTP_HOST", "0.0.0.0")
     port: int = int(os.getenv("CAPTP_PORT", "6063"))
 
     # Runtime profile

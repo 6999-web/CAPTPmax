@@ -1,32 +1,26 @@
-<<<<<<< HEAD
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import re
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
-=======
-import os
-import tempfile
->>>>>>> origin/main
 
 import cv2
 import numpy as np
 import uvicorn
-<<<<<<< HEAD
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from schemas import AnalyzeMode, RtspAnalyzeRequest, TacticalChatRequest
-from settings import settings
 from services.pipeline import pipeline
 from services.reference_images import resolve_reference_image
 from services.shooting_training import ShootingCoachSession
+from settings import settings
 
 
 DOCX_NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-
+TACTICAL_CASES_DIR = settings.backend_root / "assets" / "cases"
 
 app = FastAPI(title="CAPTP API", version="2.0.0")
 shooting_coach_sessions: dict[int, ShootingCoachSession] = {}
@@ -35,30 +29,11 @@ reference_image_resolution = resolve_reference_image()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-=======
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
-
-from ai_engine import engine
-
-app = FastAPI(title="CAPTP API", version="1.0.0")
-
-VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".mkv", ".webm")
-VIDEO_SAMPLE_POINTS = (0.18, 0.42, 0.66, 0.84)
-
-# 配置 CORS，允许 Vue 前端跨域请求
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 方便开发，可指定 frontend 端口如 http://localhost:5173
->>>>>>> origin/main
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
 
 def _decode_data_url(data: str) -> bytes:
     if "," in data:
@@ -74,12 +49,12 @@ def _encode_frame_b64(frame: np.ndarray) -> str:
 
 
 def _mode_from_legacy(mode: str) -> AnalyzeMode:
-    m = (mode or "").strip().upper()
-    if m in {"SHOOTING_POSTURE", "SHOOTING_WEAPON"}:
+    normalized = (mode or "").strip().upper()
+    if normalized in {"SHOOTING_POSTURE", "SHOOTING_WEAPON"}:
         return AnalyzeMode.shooting_posture
-    if m in {"SHOOTING_TARGET", "SHOOTING_FLOW"}:
+    if normalized in {"SHOOTING_TARGET", "SHOOTING_FLOW"}:
         return AnalyzeMode.shooting_flow
-    if m == "COMBAT_FIGHT":
+    if normalized == "COMBAT_FIGHT":
         return AnalyzeMode.combat_action
     return AnalyzeMode.combat_full
 
@@ -91,28 +66,29 @@ def _format_legacy_text(result) -> str:
         "综合评估结果",
         f"- 姿势合规: {'是' if shooting.posture_compliance else '否'} (score={shooting.posture_score:.2f})",
         f"- 射击流程阶段: {shooting.flow_stage.value}",
-        f"- 流程顺序正确: {'是' if shooting.flow_order_ok else '否'}",
+        f"- 流程序列正确: {'是' if shooting.flow_order_ok else '否'}",
     ]
+
     if shooting.violations:
-        lines.append("- 姿势/安全问题:")
-        for v in shooting.violations:
-            lines.append(f"  * [{v.severity}] {v.code}: {v.description}")
+        lines.append("- 姿势或安全问题:")
+        for violation in shooting.violations:
+            lines.append(f"  * [{violation.severity}] {violation.code}: {violation.description}")
 
     if combat.actions:
         lines.append("- 格斗动作:")
-        for a in combat.actions[:6]:
-            lines.append(f"  * {a.action} (conf={a.confidence:.2f})")
+        for action in combat.actions[:6]:
+            lines.append(f"  * {action.action} (conf={action.confidence:.2f})")
 
     if combat.quartets:
         lines.append("- 格斗四元组:")
-        for q in combat.quartets[:4]:
-            lines.append(f"  * <{q.action} | {q.effect} | {q.reason} | {q.suggestion}>")
+        for quartet in combat.quartets[:4]:
+            lines.append(f"  * <{quartet.action} | {quartet.effect} | {quartet.reason} | {quartet.suggestion}>")
 
     lines.append(f"- 体力状态: {combat.fatigue.level} (score={combat.fatigue.score:.2f})")
     lines.append(f"- 稳定性: {combat.stability:.2f}")
     lines.append(f"- 识别人数: {result.meta.persons}, 设备: {result.meta.device}, fallback={result.meta.fallback_used}")
     if result.reasoning:
-        lines.append("- 解释增强:")
+        lines.append("- 推理补充:")
         lines.append(result.reasoning)
     return "\n".join(lines)
 
@@ -141,7 +117,12 @@ async def analyze_long_video_v2(file: UploadFile = File(...), mode: AnalyzeMode 
 
 
 @app.post("/api/v2/analyze/frame")
-async def analyze_frame_v2(file: UploadFile = File(...), mode: AnalyzeMode = Form(AnalyzeMode.combat_full), frame_index: int = Form(0), fps: float = Form(0.0)):
+async def analyze_frame_v2(
+    file: UploadFile = File(...),
+    mode: AnalyzeMode = Form(AnalyzeMode.combat_full),
+    frame_index: int = Form(0),
+    fps: float = Form(0.0),
+):
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty frame")
@@ -178,13 +159,13 @@ async def analyze_stream_v2(websocket: WebSocket):
             frame_b64 = data.get("frame")
             frame_index = int(data.get("frame_index", 0))
             fps = float(data.get("fps", 0.0))
+
             if not frame_b64:
                 await websocket.send_json({"error": "missing frame"})
                 continue
 
             frame_bytes = _decode_data_url(frame_b64)
-            arr = np.frombuffer(frame_bytes, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            frame = cv2.imdecode(np.frombuffer(frame_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
             if frame is None:
                 await websocket.send_json({"error": "invalid frame"})
                 continue
@@ -227,7 +208,6 @@ def reference_image():
     }
 
 
-# v1 compatibility
 @app.post("/api/analyze-vision")
 async def analyze_vision(file: UploadFile = File(...), mode: str = Form("SHOOTING_POSTURE")):
     content = await file.read()
@@ -240,19 +220,20 @@ async def analyze_vision(file: UploadFile = File(...), mode: str = Form("SHOOTIN
 
 @app.post("/api/tactical-chat")
 async def tactical_chat(request: TacticalChatRequest):
-    scenario = request.scenario or "常规道路拦截盘查"
-    last_user = next((m.content for m in reversed(request.messages) if m.role == "user"), "请给出处置建议")
+    scenario = (request.scenario or "常规道路拦截盘查").strip()
+    last_user = next((message.content for message in reversed(request.messages) if message.role == "user"), "请说明你当前的处置动作。")
     response = (
-        f"现场反馈：基于场景【{scenario}】，你当前处置已形成初步控制。\n"
-        f"处置点评：重点是先稳控再分工，避免越级接触高风险对象。\n"
-        f"下一问题：在你刚才“{last_user[:40]}”这一步之后，你如何安排证据固定和通道管制的责任人？"
+        f"现场反馈：基于场景《{scenario}》，你当前处置已经形成初步控制。\n"
+        "处置点评：重点应当是先稳控、再分工，避免过早贴近高风险对象。\n"
+        f"下一问题：在你刚才“{last_user[:40]}”之后，准备如何安排证据固定和通道管制责任人？"
     )
     return {"result": response}
 
 
 def _pick_case_docx() -> Path | None:
-    root_dir = Path(__file__).resolve().parent.parent
-    docx_files = sorted(root_dir.glob("*.docx"))
+    if not TACTICAL_CASES_DIR.exists():
+        return None
+    docx_files = sorted(TACTICAL_CASES_DIR.glob("*.docx"))
     if not docx_files:
         return None
     return docx_files[0]
@@ -273,11 +254,11 @@ def _extract_docx_lines(file_path: Path) -> list[str]:
 
 
 def _parse_tactical_cases(lines: list[str]) -> list[dict]:
-    title_pattern = re.compile(r'^[“"]?\d{1,2}\.\d{1,2}[”"]?')
+    title_pattern = re.compile(r"""^[“"'‘]?\d{1,2}\.\s?\d{1,2}[”"'’]?""")
     question_bank = [
-        "请先概括该案核心警情与第一处置目标。",
-        "如果你是现场第一到场警力，你会如何做首轮口头控制和分工？",
-        "在不贸然强攻的前提下，你如何创造接敌窗口并控制升级风险？",
+        "请先概括该案例的核心警情和第一处置目标。",
+        "如果你是第一到场警力，你会如何做首轮口头控制和分工？",
+        "在不贸然强攻的前提下，你准备如何创造接触窗口并控制升级风险？",
         "结合本案，请复盘一条关键成功经验和一条可优化策略。",
     ]
 
@@ -286,32 +267,32 @@ def _parse_tactical_cases(lines: list[str]) -> list[dict]:
         return bool(title_pattern.match(compact))
 
     def normalize_title(text: str) -> str:
-        normalized = text.strip().replace("“", "").replace("”", "")
-        normalized = re.sub(r"(\d)\.\s+(\d)", r"\1.\2", normalized)
-        return normalized
+        normalized = text.strip().replace("“", "").replace("”", "").replace("‘", "").replace("’", "").replace('"', "").replace("'", "")
+        return re.sub(r"(\d)\.\s+(\d)", r"\1.\2", normalized)
 
-    title_indices = [idx for idx, line in enumerate(lines) if is_case_title(line)]
-    out = []
-    for case_idx, start_idx in enumerate(title_indices):
-        end_idx = title_indices[case_idx + 1] if case_idx + 1 < len(title_indices) else len(lines)
-        material_lines = [line.strip() for line in lines[start_idx + 1 : end_idx] if line.strip()]
-        out.append(
+    title_indices = [index for index, line in enumerate(lines) if is_case_title(line)]
+    cases = []
+    for case_index, start_index in enumerate(title_indices):
+        end_index = title_indices[case_index + 1] if case_index + 1 < len(title_indices) else len(lines)
+        material_lines = [line.strip() for line in lines[start_index + 1 : end_index] if line.strip()]
+        cases.append(
             {
-                "id": f"case-{case_idx + 1}",
-                "title": normalize_title(lines[start_idx]),
+                "id": f"case-{case_index + 1}",
+                "title": normalize_title(lines[start_index]),
                 "material": "\n".join(material_lines[:12]),
                 "questions": question_bank,
             }
         )
 
-    if out:
-        return out
+    if cases:
+        return cases
+
     return [
         {
             "id": "case-1",
             "title": "题库案例",
             "material": "\n".join(lines[:8]),
-            "questions": ["你如何做第一轮处置？"],
+            "questions": ["你会如何做第一轮处置？"],
         }
     ]
 
@@ -320,7 +301,7 @@ def _parse_tactical_cases(lines: list[str]) -> list[dict]:
 def tactical_cases():
     file_path = _pick_case_docx()
     if file_path is None:
-        raise HTTPException(status_code=404, detail="题库文件未找到")
+        raise HTTPException(status_code=404, detail="未找到战术题库文档")
 
     lines = _extract_docx_lines(file_path)
     return {"source": file_path.name, "cases": _parse_tactical_cases(lines)}
@@ -333,177 +314,3 @@ def health_check():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host=settings.host, port=settings.port, reload=True)
-
-=======
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
-    scenario: str | None = None
-    scenarioContext: str | None = None
-
-def _normalize_mode(mode: str) -> str:
-    normalized_mode = (mode or "").strip().upper()
-    if engine.is_supported_vision_mode(normalized_mode):
-        return normalized_mode
-
-    supported_modes = ", ".join(engine.supported_vision_modes)
-    raise HTTPException(status_code=400, detail=f"不支持的识别模式：{mode}。可用模式：{supported_modes}")
-
-def _resize_frame(frame: np.ndarray, max_side: int) -> np.ndarray:
-    height, width = frame.shape[:2]
-    longest_side = max(height, width)
-    if longest_side <= max_side:
-        return frame
-
-    scale = max_side / float(longest_side)
-    resized_width = max(1, int(width * scale))
-    resized_height = max(1, int(height * scale))
-    return cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
-
-def _encode_jpeg(frame: np.ndarray, quality: int) -> bytes:
-    success, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
-    if not success:
-        raise ValueError("图像编码失败")
-    return buffer.tobytes()
-
-def _frame_focus_score(frame: np.ndarray) -> float:
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
-
-def _build_contact_sheet(frames: list[np.ndarray], mode: str) -> bytes:
-    max_side = 960 if mode == "SHOOTING_TARGET" else 720
-    processed_frames = [_resize_frame(frame, max_side) for frame in frames]
-
-    if len(processed_frames) == 1:
-        quality = 94 if mode == "SHOOTING_TARGET" else 88
-        return _encode_jpeg(processed_frames[0], quality)
-
-    cell_height = max(frame.shape[0] for frame in processed_frames)
-    cell_width = max(frame.shape[1] for frame in processed_frames)
-    columns = 2
-    rows = (len(processed_frames) + columns - 1) // columns
-    gap = 10 if mode.startswith("COMBAT_") else 0
-    canvas_height = rows * cell_height + max(0, rows - 1) * gap
-    canvas_width = columns * cell_width + max(0, columns - 1) * gap
-    canvas = np.full((canvas_height, canvas_width, 3), 8, dtype=np.uint8)
-
-    for index, frame in enumerate(processed_frames):
-        row = index // columns
-        column = index % columns
-        start_y = row * (cell_height + gap)
-        start_x = column * (cell_width + gap)
-        offset_y = start_y + (cell_height - frame.shape[0]) // 2
-        offset_x = start_x + (cell_width - frame.shape[1]) // 2
-        canvas[offset_y:offset_y + frame.shape[0], offset_x:offset_x + frame.shape[1]] = frame
-
-    return _encode_jpeg(canvas, 88)
-
-def _prepare_image_bytes(image_bytes: bytes, mode: str) -> bytes:
-    image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-    frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-    if frame is None:
-        return image_bytes
-
-    max_side = 1800 if mode == "SHOOTING_TARGET" else 1280
-    quality = 94 if mode == "SHOOTING_TARGET" else 88
-    frame = _resize_frame(frame, max_side)
-    return _encode_jpeg(frame, quality)
-
-def _extract_video_payload(video_bytes: bytes, mode: str) -> bytes:
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            temp_file.write(video_bytes)
-            temp_path = temp_file.name
-
-        capture = cv2.VideoCapture(temp_path)
-        if not capture.isOpened():
-            raise ValueError("无法开启视频解码流")
-
-        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        candidate_positions = [0]
-        if total_frames > 0:
-            candidate_positions = [max(0, int(total_frames * point)) for point in VIDEO_SAMPLE_POINTS]
-
-        frames = []
-        visited_positions = set()
-        for position in candidate_positions:
-            if position in visited_positions:
-                continue
-
-            visited_positions.add(position)
-            capture.set(cv2.CAP_PROP_POS_FRAMES, position)
-            success, frame = capture.read()
-            if success and frame is not None:
-                frames.append(frame)
-
-        capture.release()
-
-        if not frames:
-            raise ValueError("无法从视频轨中捕获有效画面")
-
-        if mode.startswith("COMBAT_"):
-            return _build_contact_sheet(frames[:4], mode)
-
-        best_frame = max(frames, key=_frame_focus_score)
-        return _encode_jpeg(_resize_frame(best_frame, 1600), 92)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
-
-@app.post("/api/analyze-vision")
-async def analyze_vision(file: UploadFile = File(...), mode: str = Form("SHOOTING_POSTURE")):
-    """
-    分析射击 (POSTURE/TARGET/WEAPON) 或 格斗 (FIGHT/SCORING) 帧/视频。
-    如果上传的是视频文件，后台将自动智能截取关键对抗帧进行分析。
-    """
-    normalized_mode = _normalize_mode(mode)
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="No file found")
-        
-    content_type = file.content_type or ""
-    filename = (file.filename or "").lower()
-    
-    # 视频处理逻辑：格斗视频提取多帧拼图，其他视频提取最佳关键帧
-    if content_type.startswith("video/") or filename.endswith(VIDEO_EXTENSIONS):
-        try:
-            contents = _extract_video_payload(contents, normalized_mode)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"视频解析失败: {str(e)}")
-    else:
-        contents = _prepare_image_bytes(contents, normalized_mode)
-    
-    if normalized_mode == "SHOOTING_TARGET":
-        result = engine.analyze_shooting_target(contents)
-    elif normalized_mode == "COMBAT_SCORING":
-        result = engine.combat_quality_scoring(contents)
-    else:
-        result = engine.analyze_vision(contents, normalized_mode)
-
-    if result["success"]:
-        return {"result": result["data"]}
-    else:
-        raise HTTPException(status_code=500, detail=result["error"])
-
-@app.post("/api/tactical-chat")
-async def tactical_chat(request: ChatRequest):
-    """执法决策博弈推演"""
-    messages_dict = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-    result = engine.tactical_chat(messages_dict, request.scenario, request.scenarioContext)
-    if result["success"]:
-        return {"result": result["data"]}
-    else:
-        raise HTTPException(status_code=500, detail=result["error"])
-
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok"}
-
-# 如果直接运行此文件
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
->>>>>>> origin/main

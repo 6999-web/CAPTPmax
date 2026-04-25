@@ -7,10 +7,10 @@ import { settingsStore } from '../stores/settings'
 const fileInput = ref(null)
 const selectedFile = ref(null)
 const previewUrl = ref(null)
+const capturedImage = ref(null)
 const isVideo = ref(false)
 const mode = ref('COMBAT_SCORING')
 const isAnalyzing = ref(false)
-const capturedImage = ref(null)
 const feedback = ref('')
 const v2Result = ref(null)
 
@@ -32,6 +32,14 @@ const metricLabels = {
   reaction_lag_score: '反应滞后'
 }
 
+const combat = computed(() => v2Result.value?.combat || null)
+const meta = computed(() => v2Result.value?.meta || null)
+const reviewCards = computed(() => combat.value?.review_cards || [])
+const supportedActions = computed(() => combat.value?.supported_actions || [])
+const actionCount = computed(() => combat.value?.actions?.length || 0)
+const hitCount = computed(() => combat.value?.hit_events?.length || 0)
+const highImpactCards = computed(() => reviewCards.value.filter((item) => item.damage_zh !== '未形成有效击中').length)
+
 const revokePreview = () => {
   if (previewUrl.value) {
     URL.revokeObjectURL(previewUrl.value)
@@ -39,18 +47,34 @@ const revokePreview = () => {
   }
 }
 
+const revokeCapturedImage = () => {
+  if (capturedImage.value?.startsWith?.('blob:')) {
+    URL.revokeObjectURL(capturedImage.value)
+  }
+  capturedImage.value = null
+}
+
+const setCapturedBlob = (blob) => {
+  revokeCapturedImage()
+  capturedImage.value = URL.createObjectURL(blob)
+}
+
+const resetResult = () => {
+  revokeCapturedImage()
+  feedback.value = ''
+  v2Result.value = null
+}
+
 const onFileChange = (event) => {
   const [file] = event.target.files || []
-  if (file) {
-    stopCamera()
-    revokePreview()
-    selectedFile.value = file
-    isVideo.value = file.type.startsWith('video/')
-    previewUrl.value = URL.createObjectURL(file)
-    capturedImage.value = null
-    feedback.value = ''
-    v2Result.value = null
-  }
+  if (!file) return
+
+  stopCamera()
+  revokePreview()
+  resetResult()
+  selectedFile.value = file
+  isVideo.value = file.type.startsWith('video/')
+  previewUrl.value = URL.createObjectURL(file)
 }
 
 const startCamera = async () => {
@@ -61,9 +85,7 @@ const startCamera = async () => {
     }
 
     cameraActive.value = true
-    capturedImage.value = null
-    feedback.value = ''
-    v2Result.value = null
+    resetResult()
     rtspFrameCursor = 0
     startContinuousRecognition()
     return
@@ -78,11 +100,9 @@ const startCamera = async () => {
 
     mediaStream.value = stream
     cameraActive.value = true
-    capturedImage.value = null
-    feedback.value = ''
-    v2Result.value = null
+    resetResult()
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (videoElement.value) {
         videoElement.value.srcObject = stream
       }
@@ -91,7 +111,7 @@ const startCamera = async () => {
     startContinuousRecognition()
   } catch (error) {
     console.error('摄像头启动失败', error)
-    alert(`无法启动摄像头: ${error.message}`)
+    alert(`无法启动摄像头：${error.message}`)
   }
 }
 
@@ -120,8 +140,9 @@ const analyzeRtspFrame = async () => {
     throw new Error(data.detail || 'RTSP 分析失败')
   }
 
-  v2Result.value = data.analysis
+  revokeCapturedImage()
   capturedImage.value = data.frame_b64 ? `data:image/jpeg;base64,${data.frame_b64}` : null
+  v2Result.value = data.analysis
   feedback.value = ''
 }
 
@@ -130,14 +151,14 @@ const startContinuousRecognition = () => {
     clearInterval(recognitionInterval)
   }
 
-  recognitionInterval = setInterval(async () => {
+  recognitionInterval = window.setInterval(async () => {
     if (isAnalyzing.value || !cameraActive.value) return
 
     if (sourceSettings.sourceType === 'rtsp') {
       try {
         await analyzeRtspFrame()
       } catch (error) {
-        feedback.value = `RTSP 识别失败: ${error.message}`
+        feedback.value = `RTSP 识别失败：${error.message}`
       }
       return
     }
@@ -153,30 +174,28 @@ const startContinuousRecognition = () => {
     context.drawImage(video, 0, 0)
 
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85))
+    if (!blob) return
+
     const frameFile = new File([blob], 'frame.jpg', { type: 'image/jpeg' })
 
     try {
       const { ok, data } = await analyzeWithV2({ file: frameFile, legacyMode: mode.value })
       if (ok) {
+        setCapturedBlob(blob)
         v2Result.value = data
-        capturedImage.value = URL.createObjectURL(blob)
         feedback.value = ''
       }
     } catch (error) {
-      console.error('连续识别失败:', error)
+      console.error('连续识别失败', error)
     }
   }, 1000)
 }
-
-onBeforeUnmount(() => {
-  stopCamera()
-  revokePreview()
-})
 
 const triggerAnalysis = async () => {
   if (!selectedFile.value) return
 
   isAnalyzing.value = true
+  revokeCapturedImage()
   capturedImage.value = previewUrl.value
   feedback.value = ''
   v2Result.value = null
@@ -191,34 +210,20 @@ const triggerAnalysis = async () => {
       return
     }
 
-    const fallbackV2 = await analyzeWithV2({ file: selectedFile.value, legacyMode: mode.value })
-    if (fallbackV2.ok) {
-      v2Result.value = fallbackV2.data
-      return
-    }
-
     const v1 = await analyzeWithV1Fallback({ file: selectedFile.value, legacyMode: mode.value })
     if (v1.ok) {
       feedback.value = v1.data.result || ''
     } else {
-      feedback.value = `识别失败: ${v1.data.detail || '请更换更清晰的训练画面后重试。'}`
+      feedback.value = `识别失败：${v1.data.detail || '请更换更清晰的训练画面后重试。'}`
     }
   } catch (error) {
-    feedback.value = `通信超时: ${error.message}`
+    feedback.value = `通信超时：${error.message}`
   } finally {
     isAnalyzing.value = false
   }
 }
 
-const combat = computed(() => v2Result.value?.combat || null)
-const meta = computed(() => v2Result.value?.meta || null)
-const reviewCards = computed(() => combat.value?.review_cards || [])
-const supportedActions = computed(() => combat.value?.supported_actions || [])
-const actionCount = computed(() => combat.value?.actions?.length || 0)
-const hitCount = computed(() => combat.value?.hit_events?.length || 0)
-const highImpactCards = computed(() => reviewCards.value.filter((item) => item.damage_zh !== '未形成有效击中').length)
-
-const pickTopLabel = (items, fallback = '暂无明确结论') => {
+const pickTopLabel = (items, fallback) => {
   if (!items.length) return fallback
 
   const counts = new Map()
@@ -237,25 +242,22 @@ const overallSummary = computed(() => {
   const topReason = pickTopLabel(cards.map((item) => item.evade_failure_reason_zh).filter(Boolean), '画面证据不足，暂时无法稳定判断')
   const stability = Number(combat.value?.stability || 0)
   const fatigueLevel = combat.value?.fatigue?.level || '未评估'
-  const overviewText = cards.length
-    ? `本次样本共提取 ${cards.length} 条可复盘结果，以“${topAction}”为主，主要表现为“${topDamage}”。`
-    : '本次样本尚未形成稳定的实战复盘卡片，当前以系统汇总指标为主。'
-  const rhythmText = highImpactCards.value
-    ? `有效击打 ${highImpactCards.value} 次，当前对抗节奏已经出现明确的攻防转换。`
-    : '当前更偏向试探或距离拉扯阶段，尚未形成稳定有效击打。'
-  const riskText = stability < 0.45
-    ? '整体稳定性偏低，后续应优先关注重心回收、脚步调整和攻击后的自我保护。'
-    : '整体稳定性尚可，后续应继续关注连续对抗后的节奏变化与防守空当。'
 
   return {
-    overviewText,
     topAction,
     topDamage,
     topReason,
     fatigueLevel,
     stability,
-    rhythmText,
-    riskText
+    overviewText: cards.length
+      ? `本次样本共产出 ${cards.length} 条复盘结果，以“${topAction}”为主，主要表现为“${topDamage}”。`
+      : '本次样本尚未形成稳定的实战复盘卡片，当前以系统聚合指标为主。',
+    rhythmText: highImpactCards.value
+      ? `有效击打 ${highImpactCards.value} 次，当前对抗节奏已经出现明确的攻防转换。`
+      : '当前更偏向试探或距离拉扯阶段，尚未形成稳定有效击打。',
+    riskText: stability < 0.45
+      ? '整体稳定性偏低，后续应优先关注重心回收、脚步调整和攻击后的自我保护。'
+      : '整体稳定性尚可，后续应继续关注连续对抗后的节奏变化与防守空档。'
   }
 })
 
@@ -268,6 +270,12 @@ const metricEntries = (metrics) => Object.entries(metricLabels).map(([key, label
 const confidenceText = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 const metricWidth = (value) => `${Math.round((Number(value) || 0) * 100)}%`
 const cardImage = (imageB64) => imageB64 ? `data:image/jpeg;base64,${imageB64}` : ''
+
+onBeforeUnmount(() => {
+  stopCamera()
+  revokePreview()
+  revokeCapturedImage()
+})
 </script>
 
 <template>
@@ -283,17 +291,17 @@ const cardImage = (imageB64) => imageB64 ? `data:image/jpeg;base64,${imageB64}` 
     <div class="grid-layout">
       <div class="panel left-capture">
         <div class="panel-header">实战画面输入 / INPUT</div>
-        <div class="upload-area" @click="fileInput.click()">
-          <div v-if="!previewUrl && !capturedImage" class="placeholder">
+        <div class="upload-area" @click="fileInput?.click()">
+          <div v-if="!previewUrl && !capturedImage && !cameraActive" class="placeholder">
             <div class="badge">SENSING</div>
             <p>上传图片或视频，输出中文复盘卡片与动作总表</p>
           </div>
-          <img v-if="capturedImage" :src="capturedImage" alt="识别画面" class="preview-img" />
-          <img v-else-if="previewUrl && !isVideo" :src="previewUrl" class="preview-img" />
+          <img v-if="capturedImage" :src="capturedImage" alt="识别画面" class="preview-img">
+          <img v-else-if="previewUrl && !isVideo" :src="previewUrl" class="preview-img">
           <video v-else-if="previewUrl && isVideo" :src="previewUrl" class="preview-video" autoplay loop muted playsinline></video>
           <video v-if="cameraActive && sourceSettings.sourceType === 'camera'" ref="videoElement" autoplay playsinline class="preview-video"></video>
           <canvas ref="canvasElement" style="display: none;"></canvas>
-          <input type="file" ref="fileInput" @change="onFileChange" hidden accept="image/*,video/*" />
+          <input type="file" ref="fileInput" @change="onFileChange" hidden accept="image/*,video/*">
         </div>
 
         <div class="camera-btns" v-if="!selectedFile">
@@ -349,7 +357,7 @@ const cardImage = (imageB64) => imageB64 ? `data:image/jpeg;base64,${imageB64}` 
             </div>
             <div class="summary-tile">
               <span>延迟</span>
-              <strong>{{ meta?.latency_ms?.toFixed?.(1) || 0 }}ms</strong>
+              <strong>{{ meta?.latency_ms?.toFixed?.(1) || 0 }} ms</strong>
             </div>
           </div>
 
@@ -357,7 +365,7 @@ const cardImage = (imageB64) => imageB64 ? `data:image/jpeg;base64,${imageB64}` 
 
           <div class="block">
             <div class="block-title-row">
-              <h3>本次识别全量结果</h3>
+              <h3>本次识别总览</h3>
               <span class="block-tag">按时间顺序输出</span>
             </div>
 
@@ -390,8 +398,8 @@ const cardImage = (imageB64) => imageB64 ? `data:image/jpeg;base64,${imageB64}` 
             <div v-if="reviewCards.length" class="review-card-list">
               <article v-for="card in reviewCards" :key="card.card_id" class="review-card">
                 <div class="card-media">
-                  <img v-if="card.image_b64" :src="cardImage(card.image_b64)" :alt="card.action_zh" class="review-shot" />
-                  <div v-else class="shot-placeholder">暂无截帧</div>
+                  <img v-if="card.image_b64" :src="cardImage(card.image_b64)" :alt="card.action_zh" class="review-shot">
+                  <div v-else class="shot-placeholder">暂无截图</div>
                   <div class="time-chip">{{ card.timestamp }}</div>
                 </div>
 

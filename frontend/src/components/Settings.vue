@@ -107,8 +107,8 @@ onMounted(() => {
           <select
             class="select"
             :value="settings.cameraDeviceId"
-            @change="settingsStore.setCameraDeviceId($event.target.value)"
             :disabled="!cameraDevices.length"
+            @change="settingsStore.setCameraDeviceId($event.target.value)"
           >
             <option value="">自动选择可用设备</option>
             <option v-for="item in cameraDevices" :key="item.id" :value="item.id">{{ item.label }}</option>
@@ -129,7 +129,7 @@ onMounted(() => {
           :value="settings.rtspUrl"
           @input="settingsStore.setRtspUrl($event.target.value)"
         >
-        <p class="tip">当视频源模式为 RTSP 时，射击与格斗模块会通过后端抓帧并实时分析该流。</p>
+        <p class="tip">当视频源模式为 RTSP 时，射击与格斗模块会通过后端抓帧并实时分析该视频流。</p>
       </section>
 
       <section class="panel save-panel">

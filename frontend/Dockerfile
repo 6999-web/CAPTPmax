@@ -3,6 +3,8 @@ FROM node:20-alpine AS build-stage
 
 # --- 设置工作目录 ---
 WORKDIR /app
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 # --- 复制构建依赖文件并安装 ---
 COPY ./frontend/package*.json ./

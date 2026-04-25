@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {
   "VISION_PRIMARY": {
     "has_vision": true,
@@ -9,7 +8,6 @@
       "nvidia/nemotron-parse"
     ],
     "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
       "nvidia/nemotron-4-340b-reward"
     ]
   },
@@ -22,7 +20,6 @@
       "nvidia/nemotron-parse"
     ],
     "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
       "nvidia/nemotron-4-340b-reward"
     ]
   },
@@ -35,50 +32,7 @@
       "nvidia/nemotron-parse"
     ],
     "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
       "nvidia/nemotron-4-340b-reward"
     ]
   }
-=======
-{
-  "VISION_PRIMARY": {
-    "has_vision": true,
-    "has_tactical": true,
-    "has_tactical_70b": true,
-    "parse": [
-      "nvidia/nemoretriever-parse",
-      "nvidia/nemotron-parse"
-    ],
-    "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
-      "nvidia/nemotron-4-340b-reward"
-    ]
-  },
-  "PARSER_NODE": {
-    "has_vision": true,
-    "has_tactical": true,
-    "has_tactical_70b": true,
-    "parse": [
-      "nvidia/nemoretriever-parse",
-      "nvidia/nemotron-parse"
-    ],
-    "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
-      "nvidia/nemotron-4-340b-reward"
-    ]
-  },
-  "REWARD_SCORING": {
-    "has_vision": true,
-    "has_tactical": true,
-    "has_tactical_70b": true,
-    "parse": [
-      "nvidia/nemoretriever-parse",
-      "nvidia/nemotron-parse"
-    ],
-    "reward": [
-      "nvidia/llama-3.1-nemotron-70b-reward",
-      "nvidia/nemotron-4-340b-reward"
-    ]
-  }
->>>>>>> origin/main
 }

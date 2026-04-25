@@ -12,11 +12,11 @@ const handleLogin = () => {
   isAuthLoading.value = true
   errorMsg.value = ''
 
-  setTimeout(() => {
+  window.setTimeout(() => {
     if (username.value === 'admin' && password.value === '123456') {
       emit('login-success')
     } else {
-      errorMsg.value = '鉴权失败：工号或访问密钥错误'
+      errorMsg.value = '认证失败：账号或访问口令错误'
     }
     isAuthLoading.value = false
   }, 1000)
@@ -30,7 +30,7 @@ const handleLogin = () => {
       <div class="shield-logo">
         <img src="/school_badge.jpg" class="school-logo-img" alt="校徽">
         <h1>CAPTP.OS</h1>
-        <p>智警实战综合训练平台</p>
+        <p>智能警务实战综合训练平台</p>
       </div>
 
       <div class="form-body">
@@ -39,8 +39,8 @@ const handleLogin = () => {
           <input v-model="username" type="text" placeholder="POLICE_ID_001" @keyup.enter="handleLogin">
         </div>
         <div class="input-group">
-          <label>访问密钥</label>
-          <input v-model="password" type="password" placeholder="请输入访问密钥" @keyup.enter="handleLogin">
+          <label>访问口令</label>
+          <input v-model="password" type="password" placeholder="请输入访问口令" @keyup.enter="handleLogin">
         </div>
         <button class="login-btn" @click="handleLogin" :disabled="isAuthLoading">
           <span v-if="!isAuthLoading">进入终端系统</span>
@@ -60,10 +60,7 @@ const handleLogin = () => {
 <style scoped>
 .login-wrapper {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: radial-gradient(circle at 50% 50%, #1a2a47 0%, #0a0e1a 100%);
   display: flex;
   justify-content: center;
@@ -76,7 +73,9 @@ const handleLogin = () => {
   position: absolute;
   width: 100%;
   height: 100%;
-  background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-image:
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
   background-size: 100% 2px, 3px 100%;
   pointer-events: none;
 }

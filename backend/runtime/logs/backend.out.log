@@ -1,0 +1,11 @@
+INFO:     127.0.0.1:49831 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49833 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49835 - "POST /api/tactical-chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65195 - "POST /api/tactical-chat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65198 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65199 - "POST /api/analyze-vision HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50064 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50064 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53009 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53009 - "GET /api/tactical-cases HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63734 - "POST /api/v2/analyze/long-video HTTP/1.1" 200 OK

@@ -1,6 +1,5 @@
-<<<<<<< HEAD
-﻿<script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
 import Login from './components/Login.vue'
@@ -12,696 +11,212 @@ const router = useRouter()
 let timer = null
 
 const navItems = [
-  { to: '/shooting', icon: '🎯', label: '射击评估' },
-  { to: '/grappling', icon: '🥋', label: '格斗评分' },
-  { to: '/tactical', icon: '🧠', label: '决策推演' },
-  { to: '/settings', icon: '⚙️', label: '系统设置' }
+  { to: '/shooting', label: '射击评估' },
+  { to: '/grappling', label: '格斗评估' },
+  { to: '/tactical', label: '战术推演' },
+  { to: '/settings', label: '系统设置' }
 ]
 
 const pageTitle = computed(() => {
   const current = navItems.find((item) => item.to === route.path)
-  return current?.label || 'CAPTP-OS'
+  return current?.label || 'CAPTP.OS'
 })
-=======
-<script setup>
-import { ref, onMounted } from 'vue'
-import Login from './components/Login.vue'
-import Overview from './components/Overview.vue'
-import Shooting from './components/Shooting.vue'
-import Grappling from './components/Grappling.vue'
-import Tactical from './components/Tactical.vue'
-
-const isLoggedIn = ref(false)
-const currentView = ref('overview')
-const currentTime = ref('')
->>>>>>> origin/main
 
 const updateTime = () => {
-  const now = new Date()
-  currentTime.value = now.toLocaleString('zh-CN', { hour12: false })
+  currentTime.value = new Date().toLocaleString('zh-CN', { hour12: false })
 }
 
 onMounted(() => {
-<<<<<<< HEAD
   updateTime()
   timer = setInterval(updateTime, 1000)
 })
 
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
-=======
-  setInterval(updateTime, 1000)
->>>>>>> origin/main
 })
 
 const handleLoginSuccess = () => {
   isLoggedIn.value = true
-<<<<<<< HEAD
-  if (route.path === '/') {
-    router.push('/shooting')
-  }
-=======
-}
-
-const setView = (viewName) => {
-  currentView.value = viewName
->>>>>>> origin/main
 }
 
 const logout = () => {
   isLoggedIn.value = false
+  router.push('/')
 }
 </script>
 
 <template>
-  <div class="main-app" :class="{ 'logged-in': isLoggedIn }">
-<<<<<<< HEAD
+  <div class="app-shell">
     <Login v-if="!isLoggedIn" @login-success="handleLoginSuccess" />
 
-=======
-    <!-- 登录模块 -->
-    <Login v-if="!isLoggedIn" @login-success="handleLoginSuccess" />
-
-    <!-- 主体框架 -->
->>>>>>> origin/main
     <template v-else>
       <header class="top-bar">
-        <div class="system-title">
-          <span class="status-dot"></span>
-<<<<<<< HEAD
-          <span class="title-text">CAPTP-OS 警务实战综合训练平台</span>
-          <span class="version-tag">V3.2.0</span>
+        <div>
+          <div class="brand">CAPTP.OS</div>
+          <div class="subtitle">警务实战综合训练平台</div>
         </div>
-        <div class="top-meta">
-          <div class="time-box">{{ currentTime }}</div>
-          <RouterLink to="/settings" class="settings-shortcut" title="系统设置">⚙ 设置</RouterLink>
-          <div class="user-chip">
-            <span class="rank">一级警监</span>
-            <span class="name">管理员</span>
-            <button class="logout-btn" @click="logout" title="注销系统">⎋</button>
-=======
-          <span class="title-text">CAPTP-OS: 智警实战综合训练云终端</span>
-          <span class="version-tag">V3.1.2-ALPHA</span>
-        </div>
-        <div class="top-meta">
-          <div class="time-box">{{ currentTime }}</div>
-          <div class="user-chip">
-            <span class="rank">一级警督</span>
-            <span class="name">管理员</span>
-            <button class="logout-btn" @click="logout" title="注销系统">🚪</button>
->>>>>>> origin/main
-          </div>
+        <div class="top-actions">
+          <span class="clock">{{ currentTime }}</span>
+          <button class="ghost-button" @click="logout">退出登录</button>
         </div>
       </header>
 
-      <div class="layout-container">
-<<<<<<< HEAD
-        <aside class="sidebar glass">
-=======
+      <div class="layout">
         <aside class="sidebar">
->>>>>>> origin/main
-          <div class="sidebar-header">
-            <img src="/school_badge.jpg" class="side-badge" alt="校徽">
-            <div class="side-title">教研中心</div>
-          </div>
-          <div class="nav-container">
-<<<<<<< HEAD
+          <div class="sidebar-title">功能导航</div>
+          <nav class="nav-list">
             <RouterLink
               v-for="item in navItems"
               :key="item.to"
               :to="item.to"
-              class="nav-item"
+              class="nav-link"
               :class="{ active: route.path === item.to }"
             >
-              <span class="nav-ico">{{ item.icon }}</span>{{ item.label }}
+              {{ item.label }}
             </RouterLink>
-          </div>
-          <div class="status-area">
-            <div class="stat-line"><span>算力节点</span> <span class="val">ONLINE</span></div>
-            <div class="stat-line"><span>加密链路</span> <span class="val">ACTIVE</span></div>
-            <div class="stat-line"><span>部署位置</span> <span class="val">GX-CENTER</span></div>
-            <div class="stat-line"><span>当前页面</span> <span class="val">{{ pageTitle }}</span></div>
-=======
-            <button :class="{ active: currentView === 'overview' }" @click="setView('overview')">
-              <span class="nav-ico">🏠</span> 终端概览
-            </button>
-            <button :class="{ active: currentView === 'shooting' }" @click="setView('shooting')">
-              <span class="nav-ico">🎯</span> 射击评估
-            </button>
-            <button :class="{ active: currentView === 'grappling' }" @click="setView('grappling')">
-              <span class="nav-ico">🥋</span> 格斗评分
-            </button>
-            <button :class="{ active: currentView === 'tactical' }" @click="setView('tactical')">
-              <span class="nav-ico">🧠</span> 决策推演
-            </button>
-          </div>
-          <div class="status-area">
-             <div class="stat-line"><span>运算核心 (NVIDIA)</span> <span class="val">ONLINE</span></div>
-             <div class="stat-line"><span>加密链路 (TLS)</span> <span class="val">ACTIVE</span></div>
-             <div class="stat-line"><span>节点位置</span> <span class="val">GX-CENTER</span></div>
->>>>>>> origin/main
-          </div>
+          </nav>
         </aside>
 
-        <main class="content-viewport">
-<<<<<<< HEAD
-          <div class="content-frame glass">
-            <RouterView />
-=======
-          <div class="content-frame">
-              <Overview v-if="currentView === 'overview'" />
-              <Shooting v-else-if="currentView === 'shooting'" />
-              <Grappling v-else-if="currentView === 'grappling'" />
-              <Tactical v-else-if="currentView === 'tactical'" />
->>>>>>> origin/main
+        <main class="content">
+          <div class="content-header">
+            <h1>{{ pageTitle }}</h1>
+            <RouterLink to="/settings" class="settings-link">进入设置</RouterLink>
           </div>
+          <RouterView />
         </main>
       </div>
     </template>
   </div>
 </template>
 
-<style>
-<<<<<<< HEAD
-:root {
-  --bg-deep: #060b13;
-  --bg-card: rgba(13, 23, 38, 0.68);
-  --bg-active: rgba(20, 33, 58, 0.84);
-=======
-/* 全局高级感重置 */
-:root {
-  --bg-deep: #060b13;
-  --bg-card: #0d1726;
-  --bg-active: #14213a;
->>>>>>> origin/main
-  --primary: #00e5ff;
-  --secondary: #0066cc;
-  --text-main: #ffffff;
-  --text-dim: #a1b8d2;
-<<<<<<< HEAD
-  --border: rgba(0, 229, 255, 0.24);
-=======
-  --border: rgba(0, 229, 255, 0.2);
->>>>>>> origin/main
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  background-color: var(--bg-deep);
-  color: var(--text-main);
-  font-family: 'Inter', 'PingFang SC', sans-serif;
-  overflow: hidden;
-}
-
-.main-app {
-<<<<<<< HEAD
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(circle at 92% 8%, rgba(0, 102, 204, 0.28), transparent 44%),
-    radial-gradient(circle at 0% 100%, rgba(0, 229, 255, 0.18), transparent 38%),
-    #060b13;
-}
-
-.glass {
-  background: rgba(10, 17, 28, 0.72);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+<style scoped>
+.app-shell {
+  min-height: 100vh;
+  background: var(--app-bg);
+  color: var(--app-text);
 }
 
 .top-bar {
-  min-height: 64px;
-  background: rgba(10, 17, 28, 0.9);
-=======
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.top-bar {
-  height: 60px;
-  background: #0a111c;
->>>>>>> origin/main
-  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-<<<<<<< HEAD
-  padding: 0 clamp(16px, 2vw, 40px);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-=======
-  padding: 0 40px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
->>>>>>> origin/main
-  z-index: 100;
+  padding: 20px 28px;
+  border-bottom: 1px solid var(--app-border);
+  background: rgba(8, 18, 36, 0.78);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(1, 8, 18, 0.28);
 }
 
-.system-title {
-  display: flex;
-  align-items: center;
-<<<<<<< HEAD
-  gap: 12px;
+.brand {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-=======
-  gap: 15px;
-}
-
-.status-dot {
-  width: 8px; height: 8px;
->>>>>>> origin/main
-  background: #00ff88;
-  border-radius: 50%;
-  box-shadow: 0 0 8px #00ff88;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-<<<<<<< HEAD
-  0% { opacity: 0.4; }
-  50% { opacity: 1; }
-  100% { opacity: 0.4; }
-=======
-  0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; }
->>>>>>> origin/main
-}
-
-.title-text {
-  font-weight: 800;
-<<<<<<< HEAD
-  letter-spacing: 1px;
-  font-size: clamp(13px, 1vw, 16px);
-  color: var(--primary);
-=======
-  letter-spacing: 2px;
-  font-size: 16px;
-  color: var(--primary);
-  text-transform: uppercase;
->>>>>>> origin/main
-}
-
-.version-tag {
-  background: var(--bg-active);
-  font-size: 10px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-
-.top-meta {
-  display: flex;
-<<<<<<< HEAD
-  gap: 14px;
-=======
-  gap: 30px;
->>>>>>> origin/main
-  align-items: center;
-}
-
-.time-box {
-  font-family: monospace;
-  color: var(--text-dim);
+.subtitle {
+  margin-top: 4px;
+  color: var(--app-text-muted);
   font-size: 14px;
 }
 
-<<<<<<< HEAD
-.settings-shortcut {
-  color: var(--primary);
-  border: 1px solid var(--border);
-  text-decoration: none;
-  border-radius: 999px;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.settings-shortcut:hover {
-  background: rgba(0, 229, 255, 0.12);
-}
-
-=======
->>>>>>> origin/main
-.user-chip {
+.top-actions {
   display: flex;
   align-items: center;
   gap: 12px;
-<<<<<<< HEAD
-  background: rgba(0, 0, 0, 0.3);
-=======
-  background: rgba(0,0,0,0.3);
->>>>>>> origin/main
-  padding: 5px 15px;
-  border-radius: 20px;
-  border: 1px solid #1a3a5f;
 }
 
-.rank {
-  font-size: 12px;
-  color: var(--text-dim);
+.clock {
+  color: var(--app-text-muted);
+  font-size: 14px;
 }
 
-.logout-btn {
-  background: none;
-  border: none;
-  color: #ff4d4d;
+.ghost-button,
+.settings-link {
+  border: 1px solid var(--button-blue-border);
+  background: linear-gradient(135deg, var(--button-blue-start) 0%, var(--button-blue-end) 100%);
+  color: #f8fbff;
+  box-shadow: 0 12px 28px var(--button-blue-shadow);
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 14px;
+  text-decoration: none;
   cursor: pointer;
-  font-size: 16px;
-  padding: 0;
-  margin-left: 10px;
 }
 
-.layout-container {
-  display: flex;
-  flex: 1;
-<<<<<<< HEAD
-  min-height: 0;
-=======
->>>>>>> origin/main
-  overflow: hidden;
+.layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: calc(100vh - 89px);
 }
 
 .sidebar {
-<<<<<<< HEAD
-  width: clamp(220px, 16vw, 280px);
-=======
-  width: 260px;
-  background: #0a111c;
->>>>>>> origin/main
-  border-right: 1px solid var(--border);
+  padding: 24px 18px;
+  border-right: 1px solid var(--app-border);
+  background: linear-gradient(180deg, rgba(8, 18, 36, 0.92) 0%, rgba(10, 14, 26, 0.96) 100%);
+}
+
+.sidebar-title {
+  font-size: 13px;
+  color: var(--app-text-muted);
+  margin-bottom: 12px;
+}
+
+.nav-list {
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
-.sidebar-header {
-<<<<<<< HEAD
-  padding: clamp(16px, 1.8vw, 30px) clamp(14px, 1.2vw, 20px);
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  border-bottom: 1px solid rgba(0, 229, 255, 0.08);
-  margin-bottom: 14px;
-=======
-  padding: 30px 20px;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  border-bottom: 1px solid rgba(0,229,255,0.05);
-  margin-bottom: 20px;
->>>>>>> origin/main
-}
-
-.side-badge {
-  width: 45px;
-  height: 45px;
-  border-radius: 50%;
-  border: 1px solid var(--primary);
-  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
-}
-
-.side-title {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--primary);
-  letter-spacing: 2px;
-}
-
-.nav-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-<<<<<<< HEAD
-  gap: 6px;
-  padding: 0 12px;
-}
-
-.nav-item {
-  color: var(--text-dim);
-  padding: 14px 18px;
-  text-align: left;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.25s;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.nav-link {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--app-text);
   text-decoration: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
 }
 
-.nav-ico {
-  font-size: 14px;
-  opacity: 0.8;
-}
-
-.nav-item:hover {
-  background: rgba(0, 229, 255, 0.06);
+.nav-link.active {
+  background: rgba(0, 229, 255, 0.14);
+  border-color: var(--app-border-strong);
   color: var(--primary);
 }
 
-.nav-item.active {
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.16) 0%, rgba(0, 229, 255, 0) 100%);
-=======
-  gap: 5px;
-  padding: 0 20px;
+.content {
+  padding: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(0, 229, 255, 0.07), transparent 24%),
+    transparent;
 }
 
-.nav-container button {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  padding: 15px 25px;
-  text-align: left;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.nav-ico { font-size: 14px; opacity: 0.7; }
-
-.nav-container button:hover {
-  background: rgba(0, 229, 255, 0.05);
-  color: var(--primary);
-}
-
-.nav-container button.active {
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.15) 0%, rgba(0, 229, 255, 0) 100%);
->>>>>>> origin/main
-  color: var(--primary);
-  border-left: 3px solid var(--primary);
-}
-
-.status-area {
-<<<<<<< HEAD
-  padding: 20px;
-  border-top: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.2);
-=======
-  padding: 30px;
-  border-top: 1px solid var(--border);
-  background: rgba(0,0,0,0.2);
->>>>>>> origin/main
-}
-
-.stat-line {
+.content-header {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: #3d5875;
-  margin-bottom: 8px;
-  font-family: monospace;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
-.stat-line .val {
-  color: var(--primary);
+.content-header h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #f4f9ff;
 }
 
-.content-viewport {
-  flex: 1;
-<<<<<<< HEAD
-  min-width: 0;
-  min-height: 0;
-  padding: clamp(12px, 1.4vw, 24px);
-  display: flex;
-}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
 
-.content-frame {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 1px solid rgba(0, 229, 255, 0.12);
-  border-radius: 12px;
-  padding: clamp(12px, 1.2vw, 22px);
-  overflow: hidden;
-}
-
-.panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.38);
-=======
-  padding: 40px;
-  background: radial-gradient(circle at top right, #0d1726 0%, #060b13 70%);
-  overflow-y: auto;
-}
-
-.content-frame {
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-/* 统一卡片样式 */
-.panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 30px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
->>>>>>> origin/main
-}
-
-.panel::before {
-  content: '';
-  position: absolute;
-<<<<<<< HEAD
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-=======
-  top:0; left:0; width: 100%; height: 2px;
->>>>>>> origin/main
-  background: linear-gradient(90deg, var(--primary), transparent);
-}
-
-h1 {
-<<<<<<< HEAD
-  font-size: clamp(20px, 1.8vw, 30px);
-  font-weight: 900;
-  letter-spacing: 1px;
-  margin-top: 0;
-  color: #fff;
-  border-left: 5px solid var(--primary);
-  padding-left: 14px;
-=======
-  font-size: 32px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin-top: 0;
-  color: #fff;
-  border-left: 5px solid var(--primary);
-  padding-left: 20px;
->>>>>>> origin/main
-  margin-bottom: 10px;
-}
-
-h2 {
-  color: var(--primary);
-  font-size: 18px;
-  margin-top: 0;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-p {
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-
-.btn {
-  background: var(--secondary);
-  color: white;
-  border: 1px solid var(--primary);
-<<<<<<< HEAD
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: bold;
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: all 0.25s;
-=======
-  padding: 12px 30px;
-  border-radius: 4px;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  cursor: pointer;
-  transition: all 0.3s;
->>>>>>> origin/main
-  box-shadow: 0 0 15px rgba(0, 102, 204, 0.4);
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--primary);
-  color: var(--bg-deep);
-<<<<<<< HEAD
-  box-shadow: 0 0 25px rgba(0, 229, 255, 0.5);
-=======
-  box-shadow: 0 0 25px rgba(0, 229, 255, 0.6);
->>>>>>> origin/main
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  border-color: #3d5875;
-}
-
-<<<<<<< HEAD
-@media (max-width: 980px) {
   .sidebar {
-    width: 84px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(17, 24, 39, 0.08);
   }
 
-  .side-title,
-  .status-area,
-  .nav-item {
-    font-size: 0;
-  }
-
-  .nav-item {
-    justify-content: center;
-    padding: 12px;
-  }
-
-  .nav-ico {
-    font-size: 18px;
-    opacity: 1;
-  }
-
-  .top-meta {
-    gap: 10px;
-  }
-
-  .rank,
-  .name {
-    display: none;
+  .content-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
-
-=======
->>>>>>> origin/main
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-deep); }
-::-webkit-scrollbar-thumb { background: #1a3a5f; }
-::-webkit-scrollbar-thumb:hover { background: var(--primary); }
 </style>

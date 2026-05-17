@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import re
 import zipfile
 from pathlib import Path
@@ -11,8 +12,10 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
-from schemas import AnalyzeMode, RtspAnalyzeRequest, TacticalChatRequest
+from schemas import AnalyzeMode, CombatSegmentManifestItem, RtspAnalyzeRequest, TacticalChatRequest, VideoAnalysisStrategy
+from services.long_video_jobs import job_manager
 from services.pipeline import pipeline
 from services.reference_images import resolve_reference_image
 from services.shooting_training import ShootingCoachSession
@@ -21,6 +24,7 @@ from settings import settings
 
 DOCX_NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 TACTICAL_CASES_DIR = settings.backend_root / "assets" / "cases"
+PROJECT_ROOT = settings.backend_root.parent
 
 app = FastAPI(title="CAPTP API", version="2.0.0")
 shooting_coach_sessions: dict[int, ShootingCoachSession] = {}
@@ -114,6 +118,94 @@ async def analyze_long_video_v2(file: UploadFile = File(...), mode: AnalyzeMode 
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return result.model_dump()
+
+
+@app.post("/api/v2/analyze/combat-preview")
+async def analyze_combat_preview_v2(
+    frames: list[UploadFile] = File(...),
+    mode: AnalyzeMode = Form(AnalyzeMode.combat_full),
+    duration_seconds: float = Form(0.0),
+):
+    decoded_frames = []
+    for frame_file in frames:
+        content = await frame_file.read()
+        if not content:
+            continue
+        decoded_frames.append(pipeline.video_input.decode_image(content))
+
+    if not decoded_frames:
+        raise HTTPException(status_code=400, detail="No valid preview frames")
+
+    result = pipeline.analyze_combat_preview(decoded_frames, mode=mode, duration_seconds=duration_seconds)
+    return result.model_dump()
+
+
+@app.post("/api/v2/analyze/combat-video-fast")
+async def analyze_combat_video_fast_v2(
+    frames: list[UploadFile] = File(...),
+    mode: AnalyzeMode = Form(AnalyzeMode.combat_full),
+    strategy: VideoAnalysisStrategy = Form(VideoAnalysisStrategy.adaptive),
+    duration_seconds: float = Form(0.0),
+    client_extract_ms: float = Form(0.0),
+    manifest: str = Form("[]"),
+):
+    try:
+        manifest_items = [CombatSegmentManifestItem.model_validate(item) for item in json.loads(manifest)]
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid combat manifest") from exc
+
+    decoded_by_name: dict[str, np.ndarray] = {}
+    for frame_file in frames:
+        content = await frame_file.read()
+        if not content:
+            continue
+        decoded = pipeline.video_input.decode_image(content)
+        if frame_file.filename:
+            decoded_by_name[frame_file.filename] = decoded
+
+    if not decoded_by_name:
+        raise HTTPException(status_code=400, detail="No valid combat frames")
+
+    segment_frames: list[list[np.ndarray]] = []
+    for item in manifest_items:
+        grouped_frames = []
+        for filename in item.filenames:
+            frame = decoded_by_name.get(filename)
+            if frame is None:
+                raise HTTPException(status_code=400, detail=f"Missing frame {filename} in manifest")
+            grouped_frames.append(frame)
+        segment_frames.append(grouped_frames)
+
+    try:
+        result = pipeline.analyze_combat_video_fast(
+            segment_frames=segment_frames,
+            manifest=manifest_items,
+            mode=mode,
+            strategy=strategy,
+            duration_seconds=duration_seconds,
+            client_extract_ms=client_extract_ms,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result.model_dump()
+
+
+@app.post("/api/v2/analyze/long-video/jobs")
+async def create_long_video_job_v2(file: UploadFile = File(...), mode: AnalyzeMode = Form(AnalyzeMode.combat_full)):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    job = job_manager.create_job(content=content, filename=file.filename or "", content_type=file.content_type or "", mode=mode)
+    return job.model_dump()
+
+
+@app.get("/api/v2/analyze/long-video/jobs/{job_id}")
+async def get_long_video_job_v2(job_id: str):
+    job = job_manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.model_dump()
 
 
 @app.post("/api/v2/analyze/frame")
@@ -285,6 +377,12 @@ def _parse_tactical_cases(lines: list[str]) -> list[dict]:
         )
 
     if cases:
+        for case in cases:
+            normalized_title = re.sub(r"\s+", "", case["title"])
+            if normalized_title.startswith("3.21"):
+                case["material"] = "1.mp4"
+                case["mediaType"] = "video"
+                case["mediaUrl"] = "/api/tactical-media/1.mp4"
         return cases
 
     return [
@@ -305,6 +403,18 @@ def tactical_cases():
 
     lines = _extract_docx_lines(file_path)
     return {"source": file_path.name, "cases": _parse_tactical_cases(lines)}
+
+
+@app.get("/api/tactical-media/{filename}")
+def tactical_media(filename: str):
+    if Path(filename).name != filename or not filename.lower().endswith(".mp4"):
+        raise HTTPException(status_code=400, detail="Invalid media filename")
+
+    media_path = (PROJECT_ROOT / filename).resolve()
+    if media_path.parent != PROJECT_ROOT.resolve() or not media_path.exists():
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    return FileResponse(media_path, media_type="video/mp4", filename=media_path.name)
 
 
 @app.get("/api/health")

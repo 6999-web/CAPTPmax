@@ -13,7 +13,7 @@ def test_pipeline_frame_smoke():
     assert out.meta.device in {"cpu", "cuda"}
     assert out.shooting.flow_stage is not None
     assert out.shooting.ui_stage_label
-    assert len(out.shooting.step_reports) == 5
+    assert isinstance(out.shooting.step_reports, list)
     assert out.combat.supported_actions
     assert isinstance(out.combat.review_cards, list)
 

@@ -16,6 +16,8 @@ __pycache__/
 *.csr
 # Virtual environment
 captp_env/
+.venv/
+.venv312/
 # IDE / editor
 .vscode/
 .idea/
@@ -48,6 +50,9 @@ backend/logs/
 .pytest_cache/
 __pycache__/
 frontend/.vite/
+image/
+5月14日.mp4
+飞书20260422-154708.mp4
 # MinIO / storage data (if any)
 storage/
 # Other sensitive files

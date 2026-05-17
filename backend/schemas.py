@@ -19,6 +19,12 @@ class AnalyzeSource(str, Enum):
     stream = "stream"
 
 
+class VideoAnalysisStrategy(str, Enum):
+    adaptive = "adaptive"
+    five_way = "five_way"
+    single_pass = "single_pass"
+
+
 class ShootingFlowStage(str, Enum):
     pass_gun_method_1 = "pass_gun_method_1"
     pass_gun_method_2 = "pass_gun_method_2"
@@ -166,6 +172,9 @@ class MetaResult(BaseModel):
     persons: int = 0
     device: str = "cpu"
     fallback_used: bool = False
+    analysis_phase: Literal["single", "preview", "final"] = "single"
+    is_final: bool = True
+    performance: dict[str, float] = Field(default_factory=dict)
 
 
 class AttributionEvidence(BaseModel):
@@ -204,6 +213,37 @@ class AnalyzeResult(BaseModel):
     meta: MetaResult
     reasoning: str | None = None
     attribution: AttributionResult | None = None
+
+
+class LongVideoJobStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class LongVideoJobResponse(BaseModel):
+    job_id: str
+    status: LongVideoJobStatus
+    progress: int = 0
+    result: AnalyzeResult | None = None
+    error: str | None = None
+
+
+class CombatSegmentManifestItem(BaseModel):
+    segment_id: int
+    start_seconds: float = 0.0
+    end_seconds: float = 0.0
+    frame_times_seconds: list[float] = Field(default_factory=list)
+    filenames: list[str] = Field(default_factory=list)
+
+
+class CombatVideoFastRequestMeta(BaseModel):
+    mode: AnalyzeMode = AnalyzeMode.combat_full
+    strategy: VideoAnalysisStrategy = VideoAnalysisStrategy.adaptive
+    duration_seconds: float = 0.0
+    client_extract_ms: float = 0.0
+    manifest: list[CombatSegmentManifestItem] = Field(default_factory=list)
 
 
 class AnalyzeRequest(BaseModel):

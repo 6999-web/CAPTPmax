@@ -34,7 +34,25 @@ class VideoInputService:
         bundle = self.sample_video_bundle(data, max_frames=max_frames)
         return bundle["frames"], bundle["fps"]
 
-    def sample_video_bundle(self, data: bytes, max_frames: int = 24, profile: str = "uniform") -> dict:
+    def inspect_video(self, data: bytes) -> dict:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp:
+            temp.write(data)
+            path = Path(temp.name)
+
+        try:
+            cap = cv2.VideoCapture(str(path))
+            if not cap.isOpened():
+                raise ValueError("Unable to open video stream")
+
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            cap.release()
+            duration_seconds = (total / fps) if fps > 0 and total > 0 else 0.0
+            return {"total_frames": total, "fps": fps, "duration_seconds": duration_seconds}
+        finally:
+            path.unlink(missing_ok=True)
+
+    def sample_video_bundle(self, data: bytes, max_frames: int = 24, profile: str = "uniform", sequential: bool = False) -> dict:
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp:
             temp.write(data)
             path = Path(temp.name)
@@ -49,12 +67,7 @@ class VideoInputService:
             duration_seconds = (total / fps) if fps > 0 and total > 0 else 0.0
             indices = self._build_indices(total=total, max_frames=max_frames, profile=profile)
 
-            frames: list[np.ndarray] = []
-            for idx in indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                ok, frame = cap.read()
-                if ok and frame is not None:
-                    frames.append(frame)
+            frames = self._collect_frames(cap=cap, indices=indices, sequential=sequential)
 
             cap.release()
             if not frames:
@@ -66,14 +79,58 @@ class VideoInputService:
                 "total_frames": total,
                 "duration_seconds": duration_seconds,
                 "sample_profile": profile,
+                "indices": indices,
             }
         finally:
             path.unlink(missing_ok=True)
+
+    def long_video_frame_budget(self, duration_seconds: float) -> int:
+        if duration_seconds <= 60.0:
+            return 48
+        if duration_seconds <= 300.0:
+            return 72
+        return 96
+
+    def _collect_frames(self, cap: cv2.VideoCapture, indices: list[int], sequential: bool) -> list[np.ndarray]:
+        frames: list[np.ndarray] = []
+        if not indices:
+            return frames
+
+        if not sequential:
+            for idx in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ok, frame = cap.read()
+                if ok and frame is not None:
+                    frames.append(frame)
+            return frames
+
+        target_positions = sorted(set(max(0, idx) for idx in indices))
+        target_iter = iter(target_positions)
+        current_target = next(target_iter, None)
+        frame_index = 0
+
+        while current_target is not None:
+            ok = cap.grab()
+            if not ok:
+                break
+            if frame_index < current_target:
+                frame_index += 1
+                continue
+
+            ok, frame = cap.retrieve()
+            if ok and frame is not None:
+                frames.append(frame)
+            frame_index += 1
+            current_target = next(target_iter, None)
+
+        return frames
 
     def _build_indices(self, total: int, max_frames: int, profile: str) -> list[int]:
         if total <= 0:
             return list(range(max_frames))
 
+        if profile == "budgeted":
+            return self._build_budgeted_indices(total=total, max_frames=max_frames)
         if profile != "slowfast":
             step = max(1, total // max_frames)
             return list(range(0, total, step))[:max_frames]
@@ -99,6 +156,30 @@ class VideoInputService:
         if len(merged) > max_frames:
             merged = merged[:max_frames]
         return merged
+
+    def _build_budgeted_indices(self, total: int, max_frames: int) -> list[int]:
+        if total <= 0:
+            return list(range(max_frames))
+
+        anchor_count = max(1, int(round(max_frames * 0.7)))
+        dense_count = max(0, max_frames - anchor_count)
+        anchor_step = max(1, total // anchor_count)
+        anchors = list(range(0, total, anchor_step))[:anchor_count]
+        if not anchors:
+            anchors = [0]
+
+        dense_indices: list[int] = []
+        if dense_count:
+            motion_anchor_step = max(1, len(anchors) // max(1, dense_count))
+            motion_anchors = anchors[::motion_anchor_step][:dense_count]
+            for idx, anchor in enumerate(motion_anchors):
+                offset = 1 + (idx % 3)
+                dense_indices.append(min(total - 1, anchor + offset))
+
+        merged = sorted(set(anchors + dense_indices))
+        while len(merged) < max_frames and merged[-1] < total - 1:
+            merged.append(min(total - 1, merged[-1] + 1))
+        return merged[:max_frames]
 
     def infer_source_type(self, filename: str, content_type: str) -> str:
         lower = (filename or "").lower()

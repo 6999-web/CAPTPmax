@@ -5,14 +5,14 @@ import base64
 import cv2
 import numpy as np
 
-from schemas import CombatActionItem, CombatQuartet, CombatReviewCard, CombatReviewMetrics, HitEvent, SupportedCombatAction
 from cv.types import FramePoseResult, PosePerson
+from schemas import CombatActionItem, CombatQuartet, CombatReviewCard, CombatReviewMetrics, HitEvent, SupportedCombatAction
 
 
 EVADE_REASONS = [
     "距离来不及拉开",
-    "护架打开，头部/躯干暴露",
-    "重心滞后，无法及时撤步",
+    "护架被打开，头部或躯干暴露",
+    "重心被带偏后，无法及时撤步",
     "连续对抗后反应下降",
     "被假动作或上一步动作牵制",
     "画面证据不足，无法稳定判断",
@@ -33,7 +33,7 @@ ACTION_CATALOG = {
         "description_zh": "沿直线快速出拳，强调手臂伸展与中轴压迫。",
         "typical_damage_zh": "常见为击中头部或躯干，形成直接打击。",
         "common_evade_failure_reasons_zh": [EVADE_REASONS[0], EVADE_REASONS[1], EVADE_REASONS[4]],
-        "suggestion_zh": "命中后快速回收护架，避免反击空档。",
+        "suggestion_zh": "命中后快速回收护架，避免反击空当。",
     },
     "hook_punch": {
         "action_zh": "勾拳",
@@ -47,7 +47,7 @@ ACTION_CATALOG = {
         "description_zh": "抬膝与转髋发力的中远距离打击动作。",
         "typical_damage_zh": "常见为击中躯干，或形成明显压制。",
         "common_evade_failure_reasons_zh": [EVADE_REASONS[0], EVADE_REASONS[2], EVADE_REASONS[3]],
-        "suggestion_zh": "出腿后及时回收并恢复护架与重心。",
+        "suggestion_zh": "出腿后及时回收，并恢复护架与重心。",
     },
     "block": {
         "action_zh": "格挡",
@@ -152,14 +152,15 @@ class CombatAnalyzer:
         hits: list[HitEvent],
         fatigue: dict,
         fps: float,
+        limit: int | None = None,
     ) -> list[CombatReviewCard]:
         if not frames or not poses:
             return []
 
-        cards: list[CombatReviewCard] = []
         pose_by_frame = {idx: pose for idx, pose in enumerate(poses)}
         frame_by_index = {idx: frame for idx, frame in enumerate(frames)}
         hit_by_frame = {hit.frame_index: hit for hit in hits}
+        candidates: list[tuple[float, int, CombatActionItem, PosePerson | None, PosePerson | None, HitEvent | None, CombatReviewMetrics]] = []
 
         for seq_idx, action in enumerate(actions):
             pose = pose_by_frame.get(action.frame_index)
@@ -171,6 +172,22 @@ class CombatAnalyzer:
             hit = hit_by_frame.get(action.frame_index)
             attacker, defender = self._resolve_pair(pose, hit)
             metrics = self._review_metrics(pose, previous_pose, attacker, defender, action, hit, fatigue)
+            priority = (
+                float(action.confidence) * 0.45
+                + float(metrics.impact_score) * 0.25
+                + float(metrics.balance_break_score) * 0.2
+                + float(metrics.reaction_lag_score) * 0.1
+            )
+            candidates.append((priority, seq_idx, action, attacker, defender, hit, metrics))
+
+        cards: list[CombatReviewCard] = []
+        selected = sorted(candidates, key=lambda item: item[0], reverse=True)
+        if limit is not None:
+            selected = selected[:limit]
+        selected = sorted(selected, key=lambda item: (item[2].frame_index, item[1]))
+
+        for _, seq_idx, action, attacker, defender, hit, metrics in selected:
+            frame = frame_by_index[action.frame_index]
             action_zh = self._action_zh(action.action)
             damage_zh = self._damage_zh(hit, metrics.balance_break_score > 0.7, action.confidence)
             evade_failure_reason_zh = self._evade_failure_reason(metrics, action.action, hit, fatigue)
@@ -187,7 +204,7 @@ class CombatAnalyzer:
                     action_zh=action_zh,
                     damage_zh=damage_zh,
                     evade_failure_reason_zh=evade_failure_reason_zh,
-                    summary_zh=f"{timestamp}，{action_zh}，{damage_zh}；未躲闪原因：{evade_failure_reason_zh}",
+                    summary_zh=f"{timestamp}，{action_zh}，{damage_zh}；未闪避原因：{evade_failure_reason_zh}",
                     confidence=float(action.confidence),
                     attacker_id=attacker.person_id if attacker is not None else action.actor_id,
                     defender_id=defender.person_id if defender is not None else (hit.defender_id if hit is not None else None),

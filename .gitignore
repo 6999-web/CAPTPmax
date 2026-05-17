@@ -57,3 +57,11 @@ image/
 storage/
 # Other sensitive files
 # *.ini
+
+# Explicitly track project media and required runtime config
+!backend/ops/.env
+!backend/ops/.env.example
+!frontend/.env.production
+!image/
+!image/**
+!*.mp4

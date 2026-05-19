@@ -489,7 +489,6 @@ onBeforeUnmount(() => {
     <div class="page-title row">
       <div class="title-main">
         <h1>射击技战术智能评估 / MARKSMANSHIP AI</h1>
-        <p>支持图片、视频、摄像头和 RTSP 输入，单次评估最长 10 秒，结束后统一输出射击姿态问题清单与总评分。</p>
       </div>
       <div class="engine-badge">
         <span class="label">CV PIPELINE</span>

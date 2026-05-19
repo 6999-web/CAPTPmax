@@ -23,8 +23,8 @@ def run_static_audit(root: Path) -> dict:
     shooting_vue = root.parent / "frontend" / "src" / "components" / "Shooting.vue"
 
     checks = {
-        "geometry_isosceles_knee_feet": _contains_all(
-            shooting_rules, ["_check_isosceles_triangle", "_check_knee_bend_angle", "_check_feet_width"]
+        "geometry_upper_body_only": _contains_all(
+            shooting_rules, ["_check_isosceles_triangle", "_check_arm_extension", "_check_head_alignment"]
         ),
         "fine_hand_logic": _contains_all(
             shooting_rules, ["THUMB_PARALLEL_WEAK", "EJECTION_PORT_HAND_RISK", "HANDS_INCOMPLETE"]
@@ -33,7 +33,7 @@ def run_static_audit(root: Path) -> dict:
             shooting_rules, ["MUZZLE_NON_SAFE_ZONE", "high_critical", "_muzzle_vector"]
         ),
         "strict_workflow_state_machine": _contains_all(
-            shooting_training, ["A_RECEIVE_WEAPON", "B_INITIAL_CHECK", "C_SHOOT_MONITOR", "D_FINAL_CHECK", "FINAL_ORDER_ERROR"]
+            shooting_training, ["A_RECEIVE_WEAPON", "B_INITIAL_CHECK", "C_PREPARE_FIRE", "D_FIRE", "E_FINAL_CHECK", "FINAL_ORDER_ERROR"]
         ),
         "ui_single_upload_image": _contains_all(
             shooting_vue, ['v-if="cameraActive"', 'v-else-if="capturedImage"', 'v-else-if="previewUrl"']

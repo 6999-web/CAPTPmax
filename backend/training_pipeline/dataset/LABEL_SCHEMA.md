@@ -22,8 +22,9 @@ Workflow chain:
 
 - `A_RECEIVE_WEAPON`
 - `B_INITIAL_CHECK` (required: `remove_mag -> check_chamber -> safe_on`)
-- `C_SHOOT_MONITOR`
-- `D_FINAL_CHECK` (required: `final_remove_mag -> final_check_chamber`)
+- `C_PREPARE_FIRE` (required: `insert_mag -> holster_or_ready -> iso_grip -> rack_slide`)
+- `D_FIRE` (required: `fire`)
+- `E_FINAL_CHECK` (required: `final_remove_mag -> final_check_chamber`)
 
 Incorrect sequence examples should explicitly mark:
 

@@ -19,17 +19,24 @@ LEFT_WRIST = 9
 RIGHT_WRIST = 10
 LEFT_HIP = 11
 RIGHT_HIP = 12
-LEFT_KNEE = 13
-RIGHT_KNEE = 14
-LEFT_ANKLE = 15
-RIGHT_ANKLE = 16
 
 
 @dataclass
 class PostureEvaluation:
     compliance: bool
     score: float
+    dimension_scores: dict[str, float] = field(default_factory=dict)
     violations: list[Violation] = field(default_factory=list)
+
+
+DIMENSION_LABELS = {
+    "shoulder_balance": "肩线稳定",
+    "isosceles_triangle": "等腰三角",
+    "arm_extension": "手臂前伸",
+    "head_alignment": "头部对齐",
+    "grip_stability": "双手握持",
+    "muzzle_safety": "枪口安全",
+}
 
 
 class EventType(str, Enum):
@@ -106,25 +113,34 @@ class ShootingRulesAnalyzer:
                     evidence_frame_idx=frame_index,
                 )
             ]
-            return PostureEvaluation(compliance=False, score=0.0, violations=violations)
+            return PostureEvaluation(
+                compliance=False,
+                score=0.0,
+                dimension_scores={key: 0.0 for key in DIMENSION_LABELS},
+                violations=violations,
+            )
 
         subject = max(pose_result.persons, key=lambda p: p.score)
         violations: list[Violation] = []
         score_items: list[float] = []
+        dimension_scores: dict[str, float] = {}
 
-        self._check_shoulder_balance(subject, frame_index, violations, score_items)
-        self._check_isosceles_triangle(subject, frame_index, violations, score_items)
-        self._check_arm_extension(subject, frame_index, violations, score_items)
-        self._check_knee_bend_angle(subject, frame_index, violations, score_items)
-        self._check_feet_width(subject, frame_index, violations, score_items)
-        self._check_head_alignment(subject, frame_index, violations, score_items)
-        self._check_two_hand_grip(pose_result, weapon_result, frame_index, violations, score_items)
-        self._check_muzzle_safety(pose_result, weapon_result, frame_index, violations, score_items)
+        self._check_shoulder_balance(subject, frame_index, violations, score_items, dimension_scores)
+        self._check_isosceles_triangle(subject, frame_index, violations, score_items, dimension_scores)
+        self._check_arm_extension(subject, frame_index, violations, score_items, dimension_scores)
+        self._check_head_alignment(subject, frame_index, violations, score_items, dimension_scores)
+        self._check_two_hand_grip(pose_result, weapon_result, frame_index, violations, score_items, dimension_scores)
+        self._check_muzzle_safety(pose_result, weapon_result, frame_index, violations, score_items, dimension_scores)
 
         score = float(np.mean(score_items)) if score_items else 0.0
         has_critical = any(v.severity == "high_critical" for v in violations)
         has_high = any(v.severity == "high" for v in violations)
-        return PostureEvaluation(compliance=score >= 0.7 and not has_high and not has_critical, score=score, violations=violations)
+        return PostureEvaluation(
+            compliance=score >= 0.7 and not has_high and not has_critical,
+            score=score,
+            dimension_scores=dimension_scores,
+            violations=violations,
+        )
 
     def infer_flow_event(
         self,
@@ -137,11 +153,18 @@ class ShootingRulesAnalyzer:
 
         if has_weapon and subject and self._arms_extended(subject):
             return EventType.prepare_and_fire
-        if has_weapon and not posture.compliance:
-            return EventType.check_weapon
-        if not has_weapon and posture.score > 0.6:
+        if self._is_ready_pre_fire_stage(weapon_result, posture):
             return EventType.insert_magazine
         return None
+
+    def _is_ready_pre_fire_stage(
+        self,
+        weapon_result: FrameWeaponResult,
+        posture: PostureEvaluation,
+    ) -> bool:
+        # 面向上半身取景场景，射前准备放宽为只要枪械可见且姿态基本成立即可。
+        has_pistol = self._find_detection(weapon_result, "pistol", fallback_any=False) is not None
+        return has_pistol and posture.score > 0.4
 
     def _arms_extended(self, person: PosePerson) -> bool:
         k = person.keypoints_xy
@@ -162,17 +185,18 @@ class ShootingRulesAnalyzer:
         cosv = float(np.clip(cosv, -1.0, 1.0))
         return float(np.degrees(np.arccos(cosv)))
 
-    def _check_shoulder_balance(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_shoulder_balance(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         k = person.keypoints_xy
         dy = abs(float(k[LEFT_SHOULDER][1] - k[RIGHT_SHOULDER][1]))
         shoulder_span = np.linalg.norm(k[LEFT_SHOULDER] - k[RIGHT_SHOULDER]) + 1e-6
         norm = dy / shoulder_span
         score = max(0.0, 1.0 - norm * 2.5)
         score_items.append(score)
+        dimension_scores["shoulder_balance"] = float(score)
         if norm > 0.15:
             violations.append(Violation(code="SHOULDER_UNLEVEL", severity="medium", description="Shoulders are not level for stable two-arm posture.", rule_ref="basic.arms.shoulder_level", evidence_frame_idx=frame_idx))
 
-    def _check_isosceles_triangle(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_isosceles_triangle(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         k = person.keypoints_xy
         left_arm = float(np.linalg.norm(k[LEFT_WRIST] - k[LEFT_SHOULDER]))
         right_arm = float(np.linalg.norm(k[RIGHT_WRIST] - k[RIGHT_SHOULDER]))
@@ -182,7 +206,9 @@ class ShootingRulesAnalyzer:
         right_elbow = self._joint_angle(k[RIGHT_SHOULDER], k[RIGHT_ELBOW], k[RIGHT_WRIST])
 
         elbow_score = max(0.0, 1.0 - abs(left_elbow - right_elbow) / 30.0)
-        score_items.append(float(np.clip((arm_ratio + elbow_score) / 2.0, 0.0, 1.0)))
+        score = float(np.clip((arm_ratio + elbow_score) / 2.0, 0.0, 1.0))
+        score_items.append(score)
+        dimension_scores["isosceles_triangle"] = score
 
         if arm_ratio < 0.9 or not (145.0 <= left_elbow <= 178.0 and 145.0 <= right_elbow <= 178.0):
             violations.append(
@@ -195,7 +221,7 @@ class ShootingRulesAnalyzer:
                 )
             )
 
-    def _check_arm_extension(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_arm_extension(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         k = person.keypoints_xy
         arm_l = np.linalg.norm(k[LEFT_WRIST] - k[LEFT_SHOULDER])
         arm_r = np.linalg.norm(k[RIGHT_WRIST] - k[RIGHT_SHOULDER])
@@ -203,46 +229,11 @@ class ShootingRulesAnalyzer:
         ratio = (arm_l + arm_r) / (2 * torso)
         score = float(np.clip((ratio - 0.6) / 0.6, 0.0, 1.0))
         score_items.append(score)
+        dimension_scores["arm_extension"] = score
         if ratio < 0.9:
             violations.append(Violation(code="ARM_NOT_EXTENDED", severity="medium", description="Arms are not naturally extended toward target.", rule_ref="basic.arms.extension", evidence_frame_idx=frame_idx))
 
-    def _check_knee_bend_angle(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
-        k = person.keypoints_xy
-        left_angle = self._joint_angle(k[LEFT_HIP], k[LEFT_KNEE], k[LEFT_ANKLE])
-        right_angle = self._joint_angle(k[RIGHT_HIP], k[RIGHT_KNEE], k[RIGHT_ANKLE])
-        avg_angle = (left_angle + right_angle) / 2.0
-        target = 165.0
-        score = max(0.0, 1.0 - abs(avg_angle - target) / 45.0)
-        score_items.append(score)
-        if avg_angle > 178.0 or avg_angle < 130.0:
-            violations.append(
-                Violation(
-                    code="KNEE_BEND_OUT_OF_RANGE",
-                    severity="medium",
-                    description="Knee bend angle is outside the stable shooting range.",
-                    rule_ref="basic.body.knee_bend_angle",
-                    evidence_frame_idx=frame_idx,
-                )
-            )
-
-    def _check_feet_width(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
-        k = person.keypoints_xy
-        feet_width = float(np.linalg.norm(k[LEFT_ANKLE] - k[RIGHT_ANKLE]))
-        shoulder_width = float(np.linalg.norm(k[LEFT_SHOULDER] - k[RIGHT_SHOULDER])) + 1e-6
-        ratio = feet_width / shoulder_width
-        score_items.append(float(np.clip((ratio - 0.8) / 0.6, 0.0, 1.0)))
-        if ratio < 1.0:
-            violations.append(
-                Violation(
-                    code="STANCE_TOO_NARROW",
-                    severity="low",
-                    description="Foot stance should be at least shoulder-width for recoil stability.",
-                    rule_ref="basic.stance.feet_width",
-                    evidence_frame_idx=frame_idx,
-                )
-            )
-
-    def _check_head_alignment(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_head_alignment(self, person: PosePerson, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         k = person.keypoints_xy
         shoulder_mid = (k[LEFT_SHOULDER] + k[RIGHT_SHOULDER]) / 2
         head_offset = abs(float(k[NOSE][0] - shoulder_mid[0]))
@@ -250,12 +241,14 @@ class ShootingRulesAnalyzer:
         norm = head_offset / shoulder_span
         score = max(0.0, 1.0 - norm * 2.0)
         score_items.append(score)
+        dimension_scores["head_alignment"] = float(score)
         if norm > 0.25:
             violations.append(Violation(code="HEAD_NOT_ALIGNED", severity="low", description="Head is not upright and centered toward target.", rule_ref="basic.head.upright", evidence_frame_idx=frame_idx))
 
-    def _check_two_hand_grip(self, pose_result: FramePoseResult, weapon_result: FrameWeaponResult, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_two_hand_grip(self, pose_result: FramePoseResult, weapon_result: FrameWeaponResult, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         if len(pose_result.hands) < 2:
             score_items.append(0.4)
+            dimension_scores["grip_stability"] = 0.4
             violations.append(Violation(code="HANDS_INCOMPLETE", severity="medium", description="Both hands should wrap the grip with no visible gap.", rule_ref="grip.two_hands.wrap", evidence_frame_idx=frame_idx))
             return
 
@@ -266,7 +259,8 @@ class ShootingRulesAnalyzer:
         right_palm = right.points_xy[0]
         left_palm = left.points_xy[0]
         grip_distance = float(np.linalg.norm(right_palm - left_palm))
-        score_items.append(float(np.clip(1.0 - grip_distance / 220.0, 0.0, 1.0)))
+        palm_score = float(np.clip(1.0 - grip_distance / 220.0, 0.0, 1.0))
+        score_items.append(palm_score)
 
         right_thumb_tip = right.points_xy[4]
         left_thumb_tip = left.points_xy[4]
@@ -274,6 +268,7 @@ class ShootingRulesAnalyzer:
         wrist_gap = np.linalg.norm(right.points_xy[0] - left.points_xy[0]) + 1e-6
         thumb_parallel_score = float(np.clip(1.0 - (thumb_gap / (wrist_gap * 2.0)), 0.0, 1.0))
         score_items.append(thumb_parallel_score)
+        dimension_scores["grip_stability"] = float(np.clip((palm_score + thumb_parallel_score) / 2.0, 0.0, 1.0))
         if thumb_parallel_score < 0.5:
             violations.append(Violation(code="THUMB_PARALLEL_WEAK", severity="medium", description="Thumb alignment suggests unstable supporting-hand wrap.", rule_ref="grip.thumb.parallel", evidence_frame_idx=frame_idx))
 
@@ -294,10 +289,11 @@ class ShootingRulesAnalyzer:
                     )
                 )
 
-    def _check_muzzle_safety(self, pose_result: FramePoseResult, weapon_result: FrameWeaponResult, frame_idx: int, violations: list[Violation], score_items: list[float]) -> None:
+    def _check_muzzle_safety(self, pose_result: FramePoseResult, weapon_result: FrameWeaponResult, frame_idx: int, violations: list[Violation], score_items: list[float], dimension_scores: dict[str, float]) -> None:
         pistol = self._find_detection(weapon_result, "pistol", fallback_any=True)
         if pistol is None:
             score_items.append(0.5)
+            dimension_scores["muzzle_safety"] = 0.5
             return
 
         muzzle_vec = self._muzzle_vector(pistol)
@@ -316,6 +312,7 @@ class ShootingRulesAnalyzer:
 
         if critical_hits > 0:
             score_items.append(0.0)
+            dimension_scores["muzzle_safety"] = 0.0
             violations.append(
                 Violation(
                     code="MUZZLE_NON_SAFE_ZONE",
@@ -330,9 +327,11 @@ class ShootingRulesAnalyzer:
         direction = pistol.muzzle_direction
         if direction == "vertical":
             score_items.append(0.4)
+            dimension_scores["muzzle_safety"] = 0.4
             violations.append(Violation(code="MUZZLE_DIRECTION_RISK", severity="high", description="Muzzle direction does not look like a safe downrange orientation.", rule_ref="weapon.muzzle.safe_direction", evidence_frame_idx=frame_idx))
         else:
             score_items.append(0.9)
+            dimension_scores["muzzle_safety"] = 0.9
 
     @staticmethod
     def _find_detection(weapon_result: FrameWeaponResult, cls_name: str, fallback_any: bool) -> WeaponDetection | None:

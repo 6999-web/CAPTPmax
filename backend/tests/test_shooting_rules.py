@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from cv.shooting_rules import EventType, ShootingFlowStateMachine, ShootingRulesAnalyzer
+from cv.shooting_rules import EventType, PostureEvaluation, ShootingFlowStateMachine, ShootingRulesAnalyzer
 from cv.types import FramePoseResult, FrameWeaponResult, PosePerson, WeaponDetection
 from services.shooting_reporting import build_step_reports
 
@@ -56,6 +56,58 @@ def test_muzzle_critical_alarm_branch_exists():
     out = rules.evaluate_posture(pose, weapon, frame_index=1)
     severities = {v.severity for v in out.violations}
     assert severities.intersection({"high", "high_critical"})
+
+
+def test_pre_fire_stage_requires_visible_pistol_and_basic_posture_score():
+    rules = ShootingRulesAnalyzer()
+    pose = FramePoseResult(persons=[_person()], hands=[])
+    posture = rules.evaluate_posture(
+        pose,
+        FrameWeaponResult(
+            weapons=[
+                WeaponDetection(cls_name='pistol', bbox=(130, 90, 170, 110), score=0.8, muzzle_direction='horizontal'),
+            ]
+        ),
+        frame_index=2,
+    )
+
+    event = rules.infer_flow_event(
+        pose,
+        FrameWeaponResult(
+            weapons=[
+                WeaponDetection(cls_name='pistol', bbox=(130, 90, 170, 110), score=0.8, muzzle_direction='horizontal'),
+            ]
+        ),
+        posture,
+    )
+
+    assert event == EventType.insert_magazine
+
+
+def test_pre_fire_stage_not_triggered_by_missing_weapon_detection():
+    rules = ShootingRulesAnalyzer()
+    pose = FramePoseResult(persons=[_person()], hands=[])
+    posture = PostureEvaluation(compliance=True, score=0.9, violations=[])
+
+    event = rules.infer_flow_event(pose, FrameWeaponResult(weapons=[]), posture)
+
+    assert event is None
+
+
+def test_pre_fire_stage_not_triggered_by_low_posture_score():
+    rules = ShootingRulesAnalyzer()
+    pose = FramePoseResult(persons=[_person()], hands=[])
+    posture = PostureEvaluation(compliance=False, score=0.25, violations=[])
+
+    event = rules.infer_flow_event(
+        pose,
+        FrameWeaponResult(
+            weapons=[WeaponDetection(cls_name='pistol', bbox=(130, 90, 170, 110), score=0.8, muzzle_direction='horizontal')]
+        ),
+        posture,
+    )
+
+    assert event is None
 
 
 def test_violation_translation_returns_chinese_issue_cards():

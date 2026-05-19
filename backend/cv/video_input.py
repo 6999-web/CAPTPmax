@@ -30,8 +30,13 @@ class VideoInputService:
         finally:
             cap.release()
 
-    def sample_video_frames(self, data: bytes, max_frames: int = 24) -> tuple[list[np.ndarray], float]:
-        bundle = self.sample_video_bundle(data, max_frames=max_frames)
+    def sample_video_frames(
+        self,
+        data: bytes,
+        max_frames: int = 24,
+        max_duration_seconds: float | None = None,
+    ) -> tuple[list[np.ndarray], float]:
+        bundle = self.sample_video_bundle(data, max_frames=max_frames, max_duration_seconds=max_duration_seconds)
         return bundle["frames"], bundle["fps"]
 
     def inspect_video(self, data: bytes) -> dict:
@@ -52,7 +57,14 @@ class VideoInputService:
         finally:
             path.unlink(missing_ok=True)
 
-    def sample_video_bundle(self, data: bytes, max_frames: int = 24, profile: str = "uniform", sequential: bool = False) -> dict:
+    def sample_video_bundle(
+        self,
+        data: bytes,
+        max_frames: int = 24,
+        profile: str = "uniform",
+        sequential: bool = False,
+        max_duration_seconds: float | None = None,
+    ) -> dict:
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp:
             temp.write(data)
             path = Path(temp.name)
@@ -65,7 +77,13 @@ class VideoInputService:
             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
             duration_seconds = (total / fps) if fps > 0 and total > 0 else 0.0
-            indices = self._build_indices(total=total, max_frames=max_frames, profile=profile)
+            effective_total = total
+            effective_duration_seconds = duration_seconds
+            if max_duration_seconds is not None and max_duration_seconds > 0:
+                effective_duration_seconds = min(duration_seconds, float(max_duration_seconds)) if duration_seconds > 0 else float(max_duration_seconds)
+                if fps > 0 and total > 0:
+                    effective_total = min(total, max(1, int(fps * float(max_duration_seconds))))
+            indices = self._build_indices(total=effective_total, max_frames=max_frames, profile=profile)
 
             frames = self._collect_frames(cap=cap, indices=indices, sequential=sequential)
 
@@ -76,8 +94,8 @@ class VideoInputService:
             return {
                 "frames": frames,
                 "fps": fps,
-                "total_frames": total,
-                "duration_seconds": duration_seconds,
+                "total_frames": effective_total,
+                "duration_seconds": effective_duration_seconds,
                 "sample_profile": profile,
                 "indices": indices,
             }

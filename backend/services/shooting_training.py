@@ -23,8 +23,9 @@ STANDARD_SHOOTING_IMAGES = {
 class Stage(str, Enum):
     A_RECEIVE_WEAPON = "A_RECEIVE_WEAPON"
     B_INITIAL_CHECK = "B_INITIAL_CHECK"
-    C_SHOOT_MONITOR = "C_SHOOT_MONITOR"
-    D_FINAL_CHECK = "D_FINAL_CHECK"
+    C_PREPARE_FIRE = "C_PREPARE_FIRE"
+    D_FIRE = "D_FIRE"
+    E_FINAL_CHECK = "E_FINAL_CHECK"
     DONE = "DONE"
 
 
@@ -35,7 +36,6 @@ class Action(str, Enum):
     SAFE_ON = "safe_on"
     INSERT_MAG = "insert_mag"
     HOLSTER_OR_READY = "holster_or_ready"
-    DRAW = "draw"
     ISO_GRIP = "iso_grip"
     RACK_SLIDE = "rack_slide"
     FIRE = "fire"
@@ -46,8 +46,9 @@ class Action(str, Enum):
 REQUIRED_ACTIONS: Dict[Stage, List[Action]] = {
     Stage.A_RECEIVE_WEAPON: [Action.RECEIVE_WEAPON],
     Stage.B_INITIAL_CHECK: [Action.REMOVE_MAG, Action.CHECK_CHAMBER, Action.SAFE_ON],
-    Stage.C_SHOOT_MONITOR: [Action.INSERT_MAG, Action.HOLSTER_OR_READY, Action.DRAW, Action.ISO_GRIP, Action.RACK_SLIDE, Action.FIRE],
-    Stage.D_FINAL_CHECK: [Action.FINAL_REMOVE_MAG, Action.FINAL_CHECK_CHAMBER],
+    Stage.C_PREPARE_FIRE: [Action.INSERT_MAG, Action.HOLSTER_OR_READY, Action.ISO_GRIP, Action.RACK_SLIDE],
+    Stage.D_FIRE: [Action.FIRE],
+    Stage.E_FINAL_CHECK: [Action.FINAL_REMOVE_MAG, Action.FINAL_CHECK_CHAMBER],
 }
 
 
@@ -142,7 +143,7 @@ class TrainingWorkflowMachine:
         completed = len([it for it in expected if it in self._done_actions])
         next_expected = expected[min(completed, len(expected) - 1)]
 
-        if self.stage == Stage.D_FINAL_CHECK and action == Action.FINAL_CHECK_CHAMBER and Action.FINAL_REMOVE_MAG not in self._done_actions:
+        if self.stage == Stage.E_FINAL_CHECK and action == Action.FINAL_CHECK_CHAMBER and Action.FINAL_REMOVE_MAG not in self._done_actions:
             violation = Violation("FINAL_ORDER_ERROR", "终点验枪顺序错误：必须先卸弹匣，后查弹膛", self.stage)
             self.violations.append(violation)
             return TransitionResult(self.stage, False, False, violation)
@@ -161,7 +162,7 @@ class TrainingWorkflowMachine:
 
     @staticmethod
     def _next_stage(stage: Stage) -> Stage:
-        order = [Stage.A_RECEIVE_WEAPON, Stage.B_INITIAL_CHECK, Stage.C_SHOOT_MONITOR, Stage.D_FINAL_CHECK, Stage.DONE]
+        order = [Stage.A_RECEIVE_WEAPON, Stage.B_INITIAL_CHECK, Stage.C_PREPARE_FIRE, Stage.D_FIRE, Stage.E_FINAL_CHECK, Stage.DONE]
         return order[order.index(stage) + 1]
 
 
@@ -230,25 +231,6 @@ class ShootingCoachSession:
                 events.extend(self._upsert_error(card))
             else:
                 events.extend(self._remove_error("P-ISO-001", "等腰三角握持已恢复，动作合规"))
-
-        posture_ok = shooting.get("posture_compliance")
-        if posture_ok is False:
-            card = self._build_pose_card(
-                "P-POSTURE-001",
-                "姿态不合规，存在射击动作稳定性风险",
-                "放松双肘并保持膝盖微屈，稳定上肢链条",
-                frame,
-                None,
-                why_wrong=[
-                    "膝关节锁死会降低吸收后坐力能力",
-                    "重心不稳容易导致连续击发散布变大",
-                    "上肢链条紧张会放大扳机扰动",
-                ],
-                standard_ref_key="fire",
-            )
-            events.extend(self._upsert_error(card))
-        elif posture_ok is True:
-            events.extend(self._remove_error("P-POSTURE-001", "姿态已回归标准阈值"))
 
         flow_order_ok = shooting.get("flow_order_ok")
         if flow_order_ok is False:

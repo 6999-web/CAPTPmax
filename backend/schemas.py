@@ -54,6 +54,7 @@ class ShootingIssueEvidence(BaseModel):
     label: str = ""
     confidence: float = 0.0
     detail: str | None = None
+    image_b64: str | None = None
 
 
 class ShootingPrimaryIssue(BaseModel):
@@ -79,9 +80,16 @@ class ShootingStepReport(BaseModel):
     why_flagged: list[str] = Field(default_factory=list)
 
 
+class ShootingDimensionScore(BaseModel):
+    key: str
+    label_zh: str
+    score: float = 0.0
+
+
 class ShootingResult(BaseModel):
     posture_compliance: bool = False
     posture_score: float = 0.0
+    dimension_scores: list[ShootingDimensionScore] = Field(default_factory=list)
     flow_stage: ShootingFlowStage = ShootingFlowStage.check_weapon
     flow_order_ok: bool = True
     violations: list[Violation] = Field(default_factory=list)

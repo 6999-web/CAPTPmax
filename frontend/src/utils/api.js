@@ -79,6 +79,21 @@ export const analyzeCombatPreviewWithV2 = async ({ files, legacyMode, durationSe
   return { ok: response.ok, data }
 }
 
+export const analyzeShootingPreviewWithV2 = async ({ files, legacyMode, durationSeconds = 0 }) => {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('frames', file))
+  formData.append('mode', mapLegacyModeToV2(legacyMode))
+  formData.append('duration_seconds', String(durationSeconds))
+
+  const response = await fetch(buildApiUrl('/api/v2/analyze/shooting-preview'), {
+    method: 'POST',
+    body: formData
+  })
+
+  const data = await readApiPayload(response)
+  return { ok: response.ok, data }
+}
+
 export const analyzeCombatVideoFastWithV2 = async ({
   files,
   manifest,

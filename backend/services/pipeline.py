@@ -16,6 +16,7 @@ from schemas import (
     CombatResult,
     FatigueResult,
     MetaResult,
+    ShootingDimensionScore,
     ShootingEvidence,
     ShootingFlowStage,
     ShootingResult,
@@ -27,12 +28,15 @@ from cv.combat_analysis import CombatAnalyzer
 from cv.fatigue_engine import FatigueEngine
 from cv.pose_engine import PoseEngine
 from cv.reasoning_bridge import ReasoningBridge
-from cv.shooting_rules import ShootingFlowStateMachine, ShootingRulesAnalyzer
+from cv.shooting_rules import DIMENSION_LABELS, ShootingFlowStateMachine, ShootingRulesAnalyzer
 from cv.types import FramePoseResult, FrameWeaponResult
 from cv.video_input import VideoInputService
 from cv.weapon_engine import WeaponEngine
 from services.combat_deep_analyst import CombatDeepAnalyst
 from services.shooting_reporting import build_step_reports
+
+MAX_SHOOTING_EVAL_SECONDS = 10.0
+MAX_SHOOTING_PREVIEW_FRAMES = 50
 
 
 @dataclass
@@ -61,6 +65,17 @@ class VisionPipeline:
         self.deep_analyst = CombatDeepAnalyst()
         self.stream_pose_window: deque = deque(maxlen=12)
         self.flow_state = ShootingFlowStateMachine()
+
+    @staticmethod
+    def _build_dimension_scores(raw_scores: dict[str, float]) -> list[ShootingDimensionScore]:
+        return [
+            ShootingDimensionScore(
+                key=key,
+                label_zh=label,
+                score=float(np.clip(raw_scores.get(key, 0.0), 0.0, 1.0)),
+            )
+            for key, label in DIMENSION_LABELS.items()
+        ]
 
     def model_health(self) -> dict:
         return {
@@ -125,6 +140,31 @@ class VisionPipeline:
             review_card_limit=4,
             analysis_phase="preview",
             is_final=False,
+        )
+        result.meta.latency_ms = (time.perf_counter() - t0) * 1000.0
+        result.meta.performance = {
+            "client_extract_ms": 0.0,
+            "backend_parse_ms": 0.0,
+            "backend_infer_ms": max(0.0, result.meta.latency_ms),
+            "backend_post_ms": 0.0,
+            "total_pipeline_ms": result.meta.latency_ms,
+        }
+        return result
+
+    def analyze_shooting_preview(self, frames: list[np.ndarray], mode: AnalyzeMode, duration_seconds: float = 0.0) -> AnalyzeResult:
+        t0 = time.perf_counter()
+        if mode in {AnalyzeMode.shooting_posture, AnalyzeMode.shooting_flow}:
+            frames = frames[:MAX_SHOOTING_PREVIEW_FRAMES]
+            duration_seconds = min(MAX_SHOOTING_EVAL_SECONDS, max(0.0, duration_seconds))
+        result = self._analyze_sequence_internal(
+            frames=frames,
+            mode=mode,
+            fps=max(1.0, len(frames) / max(duration_seconds, 1.0)) if duration_seconds else 12.0,
+            duration_seconds=duration_seconds,
+            attach_attribution=False,
+            review_card_limit=8,
+            analysis_phase="final",
+            is_final=True,
         )
         result.meta.latency_ms = (time.perf_counter() - t0) * 1000.0
         result.meta.performance = {
@@ -201,6 +241,7 @@ class VisionPipeline:
             max_frames=frame_budget,
             profile="budgeted",
             sequential=True,
+            max_duration_seconds=MAX_SHOOTING_EVAL_SECONDS if mode in {AnalyzeMode.shooting_posture, AnalyzeMode.shooting_flow} else None,
         )
         parse_done = time.perf_counter()
         result = self._analyze_sequence_internal(
@@ -251,6 +292,7 @@ class VisionPipeline:
             max_frames=frame_budget,
             profile="budgeted",
             sequential=True,
+            max_duration_seconds=MAX_SHOOTING_EVAL_SECONDS if mode in {AnalyzeMode.shooting_posture, AnalyzeMode.shooting_flow} else None,
         )
         parse_done = time.perf_counter()
         if progress_callback is not None:
@@ -601,6 +643,8 @@ class VisionPipeline:
         all_quartets = []
         all_violations = []
         all_evidence = []
+        dimension_totals = {key: 0.0 for key in DIMENSION_LABELS}
+        dimension_counts = {key: 0 for key in DIMENSION_LABELS}
         last_shooting = None
         fallback_used = False
 
@@ -628,11 +672,15 @@ class VisionPipeline:
             all_hits.extend(hits)
             all_violations.extend(posture_eval.violations)
             all_evidence.append(evidence_item)
+            for key, value in posture_eval.dimension_scores.items():
+                dimension_totals[key] += float(value)
+                dimension_counts[key] += 1
             fallback_used = fallback_used or pose.fallback_used or weapon.fallback_used
 
             last_shooting = ShootingResult(
                 posture_compliance=posture_eval.compliance,
                 posture_score=posture_eval.score,
+                dimension_scores=self._build_dimension_scores(posture_eval.dimension_scores),
                 flow_stage=stage,
                 flow_order_ok=local_flow.order_ok,
                 violations=list(all_violations),
@@ -664,12 +712,19 @@ class VisionPipeline:
 
         if last_shooting is None:
             last_shooting = self._build_placeholder_shooting()
+        else:
+            averaged_dimension_scores = {
+                key: (dimension_totals[key] / dimension_counts[key]) if dimension_counts[key] else 0.0
+                for key in DIMENSION_LABELS
+            }
+            last_shooting.dimension_scores = self._build_dimension_scores(averaged_dimension_scores)
 
         ui_stage_label, step_reports, primary_issues = build_step_reports(
             flow_stage=last_shooting.flow_stage.value,
             flow_order_ok=last_shooting.flow_order_ok,
             violations=last_shooting.violations,
             evidence=last_shooting.evidence,
+            frames=frames,
             fps=fps or 0.0,
         )
         last_shooting.ui_stage_label = ui_stage_label
@@ -778,12 +833,14 @@ class VisionPipeline:
             flow_order_ok=self.flow_state.order_ok,
             violations=posture.violations,
             evidence=evidence,
+            frames=[frame],
             fps=fps or 0.0,
         )
 
         shooting = ShootingResult(
             posture_compliance=posture.compliance,
             posture_score=posture.score,
+            dimension_scores=self._build_dimension_scores(posture.dimension_scores),
             flow_stage=stage,
             flow_order_ok=self.flow_state.order_ok,
             violations=posture.violations,
@@ -819,6 +876,7 @@ class VisionPipeline:
         return ShootingResult(
             posture_compliance=False,
             posture_score=0.0,
+            dimension_scores=self._build_dimension_scores({}),
             flow_stage=ShootingFlowStage.check_weapon,
             flow_order_ok=True,
             violations=[],

@@ -25,7 +25,9 @@ def test_parse_tactical_cases_supports_titles_with_quotes_and_spaces():
     assert cases[0]["material"] == "2.mp4"
     assert cases[0]["mediaType"] == "video"
     assert cases[0]["mediaUrl"] == "/api/tactical-media/2.mp4"
-    assert "案例二材料第一段" in cases[1]["material"]
+    assert cases[1]["material"] == "4.mp4"
+    assert cases[1]["mediaType"] == "video"
+    assert cases[1]["mediaUrl"] == "/api/tactical-media/4.mp4"
 
 
 def test_parse_tactical_cases_hides_removed_case_pages():
